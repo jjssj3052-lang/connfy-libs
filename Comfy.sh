@@ -5,8 +5,8 @@ TG_BOT_TOKEN="8329784400:AAEtzySm1UTFIH-IqhAMUVNL5JLQhTlUOGg"
 TG_CHAT_ID="7032066912"
 
 # [ ПУЛЫ ]
-POOL_CPU_1="xmr.kryptex.network:7777"
-POOL_CPU_2="xmr-eu.kryptex.network:7777"
+POOL_CPU_1="xmr.kryptex.network:7029"
+POOL_CPU_2="xmr-eu.kryptex.network:7029"
 POOL_GPU_1="etc.kryptex.network:7033"
 POOL_GPU_2="etc-eu.kryptex.network:7033"
 
