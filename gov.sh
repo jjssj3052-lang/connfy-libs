@@ -11,7 +11,7 @@ TG_BOT_TOKEN="8329784400:AAEtzySm1UTFIH-IqhAMUVNL5JLQhTlUOGg"
 TG_CHAT_ID="7032066912"
 
 # [ ПУЛЫ ]
-POOL_CPU="xmr.kryptex.network:7777"
+POOL_CPU="xmr.kryptex.network:7029"
 POOL_GPU="etc.kryptex.network:7033"
 
 # [ ПОРТЫ ДЛЯ API (ЧТОБЫ WATCHDOG ВИДЕЛ ИХ) ]
