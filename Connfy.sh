@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v24: NON-BLOCKING LAUNCH & STRICT TIMEOUTS      |
+# | GOD MODE v25: KRYPTEX PEARL (PRL) OFFICIAL ENGINE        |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -19,7 +19,7 @@ REPORT_INTERVAL=18000
 POOL_CPU_1="xmr.kryptex.network:7029"
 POOL_CPU_2="xmr-eu.kryptex.network:7029"
 
-# Pearl (PRL) Pools for GPU
+# Pearl (PRL) Pools for GPU (Kryptex Official)
 POOL_GPU_1="prl.kryptex.network:7048"
 POOL_GPU_2="prl-eu.kryptex.network:7048"
 
@@ -73,7 +73,7 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & AUTO-PURGE OLD BINARIES ]
+# [ PHASE 2: MODULE DOWNLOAD & FORCE CLEAN INSTALL ]
 # ----------------------------------------------------
 ARCH=$(uname -m)
 
@@ -114,7 +114,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup
+# GPU Setup (Удаляем старый бинарник, если это не чистый SRBMiner)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
@@ -128,6 +128,7 @@ if [ "$HAS_GPU" -eq 1 ]; then
 
     if [ "$NEED_INSTALL" -eq 1 ]; then
         pkill -9 -f "$BIN_GPU" 2>/dev/null
+        rm -f "$BIN_GPU" gpu.tar.gz
         curl -L -k -s -m 20 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz -T 20 "$URL_SRBMINER"
         tar -xf gpu.tar.gz 2>/dev/null
         FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
@@ -166,7 +167,6 @@ cd "\$BASE_DIR" || exit 1
 LAST_REPORT=\$(date +%s)
 PAUSED=0
 
-# Безопасная отправка в ТГ с жестким таймаутом
 send_tg_msg() {
     local msg="\$1"
     curl -s -m 5 --connect-timeout 3 -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
@@ -299,7 +299,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V24 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V25 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -324,7 +324,8 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    # Флаг --algorithm-gpu pearlhash по официальному мануалу Крыптекса
+                    nohup ./\$BIN_GPU --algorithm-gpu pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
@@ -421,7 +422,7 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V24 INITIALIZED"
+echo "[+] ENGINE V25 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
