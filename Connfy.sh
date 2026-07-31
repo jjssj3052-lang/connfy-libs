@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v22: AUTO-PURGE OLD BINARIES & SRBMINER FIX     |
+# | GOD MODE v23: SRBMINER ULTRA-STABLE GPU FLAGS EDITION    |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -114,13 +114,12 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Авто-проверка: если лежит старый lolMiner, он удаляется и ставится SRBMiner)
+# GPU Setup (Удаляем старые бинарники, если это не SRBMiner)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
         NEED_INSTALL=1
     else
-        # Если файл есть, но это НЕ SRBMiner — сносим старый бинарник
         if ! ./$BIN_GPU --version 2>&1 | grep -i "SRBMiner" >/dev/null; then
             rm -f "$BIN_GPU"
             NEED_INSTALL=1
@@ -299,7 +298,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V22 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V23 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -324,7 +323,8 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    # SRBMiner-MULTI Pearl (PRL) with Watchdog & Disabling CPU
+                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
@@ -421,7 +421,7 @@ nohup ./watchdog.sh >/dev/null 2>&1 &
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V22 INITIALIZED"
+echo "[+] ENGINE V23 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
