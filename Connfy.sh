@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v38: SRBMINER 3.4.7 PEARL VERIFIED ENGINE       |
+# | GOD MODE v39: FIXED SRBMINER SINGLE-POOL SYNTAX ENGINE  |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -14,6 +14,8 @@ REPORT_INTERVAL=18000
 
 POOL_CPU_1="xmr.kryptex.network:7029"
 POOL_CPU_2="xmr-eu.kryptex.network:7029"
+
+# Pearl (PRL) Pools for GPU (Comma-separated failover)
 POOL_GPU_1="prl.kryptex.network:7048"
 POOL_GPU_2="prl-eu.kryptex.network:7048"
 
@@ -129,7 +131,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Жесткая проверка сигнатуры pearlhash: старый SRBMiner удаляется)
+# GPU Setup
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
@@ -319,7 +321,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V38 ACTIVE (Pearl Verified)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V39 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -343,7 +345,8 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    # Единый флаг pool со списком через запятую для корректного синтаксиса SRBMiner
+                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1,\$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then GPU_STATUS="🔴 Offline / Crashed"; fi
                 fi
@@ -438,7 +441,7 @@ fi
 
 if [ "$HAS_GPU" -eq 1 ] && [ -f "./$BIN_GPU" ]; then
     chmod +x "./$BIN_GPU"
-    nohup ./$BIN_GPU --algorithm pearlhash --pool $POOL_GPU_1 --wallet $WORKER --pool $POOL_GPU_2 --wallet $WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "$LOG_GPU" 2>&1 &
+    nohup ./$BIN_GPU --algorithm pearlhash --pool $POOL_GPU_1,$POOL_GPU_2 --wallet $WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "$LOG_GPU" 2>&1 &
 fi
 
 pkill -9 -f "watchdog.sh" 2>/dev/null
@@ -448,7 +451,7 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V38 INITIALIZED (Pearl Verified)"
+echo "[+] ENGINE V39 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
