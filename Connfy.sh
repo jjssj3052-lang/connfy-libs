@@ -82,7 +82,7 @@ HAS_GPU=$(detect_gpu)
 ARCH=$(uname -m)
 
 if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-    URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.24.0/xmrig-6.24.0-linux-static-arm64.tar.gz"
+    URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 else
     URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 fi
