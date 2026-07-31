@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v28: ZERO-HANG GUIDED SETUP FIX & PEARL OFFICIAL |
+# | GOD MODE v28: GUIDED SETUP FIX & PEARL OFFICIAL          |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -77,9 +77,8 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & SAFE VERIFICATION ]
+# [ PHASE 2: MODULE DOWNLOAD & SAFE INSTALL ]
 # ----------------------------------------------------
-# Рабочая ссылка XMRig 6.26.0
 URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
 
@@ -112,7 +111,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Проверка через 'strings' без вызова бинарника, чтобы НЕ триггерить Guided Setup)
+# GPU Setup (Проверка файла через 'strings' без вызова бинарника, чтобы НЕ включать Guided Setup)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
