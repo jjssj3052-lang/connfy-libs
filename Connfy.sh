@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v18: SRBMiner-MULTI PEARL (PRL) EDITION         |
+# | GOD MODE v19: VERBOSE STARTUP LOGS & DIAGNOSTICS         |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -73,7 +73,7 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & ARCHITECTURE DETECTION ]
+# [ PHASE 2: MODULE DOWNLOAD & SETUP ]
 # ----------------------------------------------------
 ARCH=$(uname -m)
 
@@ -83,7 +83,6 @@ else
     URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 fi
 
-# SRBMiner-MULTI 3.4.7 for Pearl (PRL)
 URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
 
 # CPU Setup
@@ -115,7 +114,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (SRBMiner-MULTI for Pearl)
+# GPU Setup
 if [ "$HAS_GPU" -eq 1 ] && [ ! -f "$BIN_GPU" ]; then
     curl -L -k -s -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz "$URL_SRBMINER"
     tar -xf gpu.tar.gz 2>/dev/null
@@ -286,7 +285,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V18 (SRBMiner Pearl Active)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V19 (VERBOSE ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -310,7 +309,6 @@ while true; do
             GPU_STATUS="🟢 Active"
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
-                    # SRBMiner-MULTI for Pearl (PRL) on GPU
                     nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
@@ -400,12 +398,58 @@ EOF
 
 chmod +x watchdog.sh
 
-# Перезапуск Вачдога
+# Запускаем вачдог в фоне
 pkill -9 -f "watchdog.sh" 2>/dev/null
 nohup ./watchdog.sh >/dev/null 2>&1 &
 
 # ----------------------------------------------------
-# [ PHASE 4: UNIVERSAL PERSISTENCE ]
+# [ PHASE 4: VERBOSE STARTUP DIAGNOSTICS ]
+# ----------------------------------------------------
+echo "================================================="
+echo "🚀 ENGINE V19 INITIALIZED"
+echo "🌐 Server IP: $SERVER_IP"
+echo "🆔 Worker ID: $WORKER"
+echo "================================================="
+echo "[+] Igniting core engines..."
+sleep 4
+
+echo "-------------------------------------------------"
+echo "💻 CPU ENGINE STATUS:"
+if pgrep -f "$BIN_CPU" >/dev/null; then
+    CPU_PID=$(pgrep -f "$BIN_CPU" | head -n 1)
+    echo "  🟢 RUNNING (PID: $CPU_PID)"
+    echo "  📄 Initial Log Tail:"
+    if [ -f "$LOG_CPU" ]; then
+        tail -n 3 "$LOG_CPU" 2>/dev/null | sed 's/^/     /'
+    else
+        echo "     (Initializing log file...)"
+    fi
+else
+    echo "  🔴 OFFLINE / FAILED TO START"
+fi
+
+echo "-------------------------------------------------"
+echo "🎮 GPU ENGINE STATUS (SRBMiner Pearl):"
+if [ "$HAS_GPU" -eq 1 ]; then
+    if pgrep -f "$BIN_GPU" >/dev/null; then
+        GPU_PID=$(pgrep -f "$BIN_GPU" | head -n 1)
+        echo "  🟢 RUNNING (PID: $GPU_PID)"
+        echo "  📄 Initial Log Tail:"
+        if [ -f "$LOG_GPU" ]; then
+            tail -n 3 "$LOG_GPU" 2>/dev/null | sed 's/^/     /'
+        else
+            echo "     (Initializing log file...)"
+        fi
+    else
+        echo "  🔴 OFFLINE / FAILED TO START"
+    fi
+else
+    echo "  ⚪ N/A (CPU-Only Machine)"
+fi
+echo "================================================="
+
+# ----------------------------------------------------
+# [ PHASE 5: UNIVERSAL PERSISTENCE ]
 # ----------------------------------------------------
 if command -v crontab >/dev/null 2>&1; then
     (crontab -l 2>/dev/null | grep -v "watchdog.sh"; \
